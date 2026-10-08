@@ -12,6 +12,15 @@
 - [x] Arrivée de survivants, file d'attente, accueil, paiement
 - [x] HUD ressources
 
+## Jalon 1.5 — Passage au rendu 3D
+- [x] 5 packs 3D convertis (`npm run assets`) : nature, forêt, survie, personnages animés + accessoires, loup — catalogue + chargeur + page d'aperçu
+- [ ] Renderer three.js derrière l'interface `Renderer` existante (caméra inclinée, sol, joueur, survivants)
+- [ ] Nœuds de ressources affichés avec les modèles (arbres, buissons, rochers) + état épuisé
+- [ ] Décor instancié (herbe, fleurs, cailloux) + forêt de bordure
+- [ ] Effets/HUD 2D superposés (projection 3D → écran)
+- [ ] Joueur et survivants en personnages animés (marche, idle, interaction)
+- [ ] Bâtiments du camp avec le Survival Kit (tente, feu de camp, emplacements de construction)
+
 ## Jalon 2 — Sauvegarde
 - [x] Format versionné + checksum + double slot
 - [x] Autosave + export/import
@@ -27,7 +36,7 @@
 ## Jalon 4 — Temps & danger
 - [ ] Cycle jour/nuit (teinte, visibilité)
 - [ ] Saisons (repousse, chauffage, palette)
-- [ ] Menaces nocturnes + palissade, torches, gardes
+- [ ] Menaces nocturnes (loup animé) + palissade, torches, gardes
 
 ## Jalon 5 — Progression & polish
 - [ ] Objectifs, étoiles, nouvelles zones

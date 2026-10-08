@@ -10,7 +10,11 @@
     ".env.*",
     ".git/**",
     "node_modules/**",
-    "package-lock.json"
+    "package-lock.json",
+    "assets-src/**",
+    "public/assets/**",
+    "src/render/assets/asset-catalog.ts",
+    "tools/build-assets.mjs"
   ],
 
   "unreadable": [".env", ".env.*", "**/*.pem", "**/*.key"],
@@ -65,7 +69,7 @@
 
     "render-dev": {
       "write": ["src/render/**", "src/ui/**", "src/app/**", "src/main.ts", "src/styles/**", "index.html", "public/**"],
-      "bash": ["^npm run (build|typecheck|lint)\\b", "^npx tsc --noEmit\\b", "^npx eslint\\b"]
+      "bash": ["^npm run (build|typecheck|lint|assets)\\b", "^npx tsc --noEmit\\b", "^npx eslint\\b"]
     },
 
     "save-guardian": {

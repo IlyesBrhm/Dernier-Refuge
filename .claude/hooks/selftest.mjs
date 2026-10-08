@@ -51,6 +51,12 @@ const cases = [
   ["deny", "render-dev lint --fix", B("npm run lint -- --fix"), "render-dev"],
   ["deny", "core-dev npx eslint --fix", B("npx eslint . --fix"), "core-dev"],
   ["deny", "architect npm run lint", B("npm run lint"), "architect"],
+  ["deny", "render-dev écrit un asset généré", W("public/assets/nature/CommonTree_1.gltf"), "render-dev"],
+  ["deny", "render-dev écrit le catalogue généré", W("src/render/assets/asset-catalog.ts"), "render-dev"],
+  ["allow", "render-dev écrit le loader", W("src/render/assets/asset-loader.ts"), "render-dev"],
+  ["deny", "main écrit une source d'asset", W("assets-src/nature-megakit/models/Pine_1.gltf")],
+  ["allow", "render-dev npm run assets", B("npm run assets"), "render-dev"],
+  ["deny", "core-dev npm run assets", B("npm run assets"), "core-dev"],
   ["deny", "main rm -rf", B("rm -rf src")],
   ["deny", "main git push", B("git push origin main")],
   ["deny", "main git reset --hard", B("git reset --hard HEAD~3")],
@@ -86,6 +92,7 @@ const purity = (code) => {
 };
 check(purity("export const r = () => Math.random();\n") === 2, "core-purity bloque Math.random");
 check(purity('import { x } from "../render/draw";\n') === 2, "core-purity bloque un import de render");
+check(purity('import * as THREE from "three";\n') === 2, "core-purity bloque three.js");
 check(purity("export const ok = (n: number) => n + 1; // Math.random() en commentaire\n") === 0, "core-purity accepte du code pur");
 rmSync(tmp, { force: true });
 rmSync(f(".claude/state"), { recursive: true, force: true });

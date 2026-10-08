@@ -6,3 +6,6 @@ coverage/
 .claude/settings.local.json
 .claude/logs/
 .claude/state/
+
+# Sources 3D brutes (packs CC0 téléchargés), non versionnées
+assets-src/

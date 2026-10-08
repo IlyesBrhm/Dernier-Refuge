@@ -4,11 +4,11 @@ import tseslint from "typescript-eslint";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist/", "coverage/", "node_modules/"] },
+  { ignores: ["dist/", "coverage/", "node_modules/", "public/", "assets-src/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["src/**/*.ts", "tests/**/*.ts"],
+    files: ["src/**/*.ts", "tests/**/*.ts", "tools/**/*.ts"],
     languageOptions: { globals: { ...globals.browser } },
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
@@ -37,7 +37,7 @@ export default tseslint.config(
       ],
       "no-restricted-imports": [
         "error",
-        { patterns: ["**/app", "**/app/**", "**/ui", "**/ui/**", "**/render", "**/render/**", "**/save", "**/save/**"] },
+        { patterns: ["three", "three/**", "**/app", "**/app/**", "**/ui", "**/ui/**", "**/render", "**/render/**", "**/save", "**/save/**"] },
       ],
     },
   },

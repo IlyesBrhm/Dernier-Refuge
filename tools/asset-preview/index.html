@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aperçu des assets — Dernier Refuge</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #1b2418; color: #e8f0dc; font: 14px system-ui, sans-serif; overflow: hidden; }
+      #info { position: fixed; top: 8px; left: 8px; background: #000a; padding: 8px 12px; border-radius: 6px; max-width: 360px; }
+      #label { position: fixed; bottom: 8px; left: 8px; background: #000a; padding: 6px 10px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <select id="pack" style="position: fixed; top: 8px; right: 8px; font: inherit; padding: 4px"></select>
+    <div id="info">Chargement…</div>
+    <div id="label">Survole un modèle</div>
+    <script type="module" src="./preview.ts"></script>
+  </body>
+</html>

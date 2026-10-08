@@ -28,6 +28,7 @@ const FORBIDDEN = [
   [/Date\.now\s*\(|new Date\s*\(|performance\.now\s*\(/, "horloge réelle — le temps du jeu vient des ticks passés en paramètre"],
   [/requestAnimationFrame|setTimeout|setInterval/, "timers — la boucle de jeu vit dans src/app"],
   [/from\s+["'][^"']*\/(render|ui|app|save)\b/, "import d'une couche supérieure — core ne dépend de rien"],
+  [/from\s+["']three(\/[^"']*)?["']/, "three.js — le 3D appartient à src/render ; le core manipule des nombres (tuiles, unités)"],
   [/\bconsole\.log\b/, "console.log laissé dans le core"],
 ];
 
