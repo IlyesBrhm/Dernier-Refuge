@@ -1,11 +1,24 @@
 // checkInvariants doit DÉTECTER chaque corruption (anti-triche / chargement de save futur).
 // + sélecteurs en lecture seule.
 
-import { NODES, PICKUP, RESOURCES, TENT, WELCOME, WORLD } from "../../src/data/balance";
+import {
+  BUILD,
+  LIMITS,
+  MAP_LAYOUT,
+  NODES,
+  PICKUP,
+  PLAUSIBILITY,
+  RESOURCES,
+  STARTING_RESOURCES,
+  SURVIVOR,
+  TENT,
+  WELCOME,
+  WORLD,
+} from "../../src/data/balance";
 import * as coreIndex from "../../src/core/index";
 import { maxRegrowDelay } from "../../src/core/harvest-rules";
-import { checkInvariants } from "../../src/core/invariants";
-import { isWalkable, tileCenter, tileOf } from "../../src/core/map";
+import { checkInvariants, heldTotal, plausibleMax } from "../../src/core/invariants";
+import { isWalkable, parseMap, referenceMap, tileCenter, tileOf } from "../../src/core/map";
 import {
   freeTentCount,
   isPlayerOn,
@@ -16,7 +29,7 @@ import {
 } from "../../src/core/selectors";
 import { pickupSystem } from "../../src/core/systems/pickup";
 import type { GameState } from "../../src/core/state";
-import { deepFreeze, edit, expectValid, fresh, place, run, runUntil } from "./helpers";
+import { deepFreeze, edit, editPlausible, expectValid, fresh, place, run, runUntil, withHeadQueued } from "./helpers";
 
 /** État de milieu de partie cohérent : 1 survivant vers la tente, 1 en file, 1 drop, slot 0 construit. */
 function midGame(): GameState {
@@ -199,7 +212,7 @@ describe("checkInvariants détecte les corruptions", () => {
   }
 
   it("un drop au sol au-delà de RESOURCES.cap reste valide (le plafond ne s'applique qu'au stock)", () => {
-    expectValid(edit(base, (d) => void (d.drops[0]!.amount = RESOURCES.cap + 1)));
+    expectValid(editPlausible(base, (d) => void (d.drops[0]!.amount = RESOURCES.cap + 1)));
   });
 
   it("bois + nourriture sur la même tuile reste valide (un drop par (tuile, ressource))", () => {
@@ -230,7 +243,7 @@ describe("checkInvariants détecte les corruptions", () => {
     const U = WORLD.unitsPerTile;
     // Joueur juste au-dessus du nœud (tuile (2,8), hitbox libre), drop juste en dessous (tuile (2,10)),
     // à exactement PICKUP.magnetRadius en Chebyshev.
-    const before = edit(fresh(), (d) => {
+    const before = editPlausible(fresh(), (d) => {
       d.player.pos = { x: 2 * U + U / 2, y: 8 * U + 600 };
       d.drops.push({
         id: d.nextId++,
@@ -247,13 +260,328 @@ describe("checkInvariants détecte les corruptions", () => {
     expect(isWalkable(after.map, tileOf(drop.pos))).toBe(false);
     expectValid(after);
     // Stock plein à cet instant : le drop reste sur le nœud, l'état reste valide.
-    expectValid(pickupSystem(edit(after, (d) => void (d.resources.wood = RESOURCES.cap))));
-    expect(pickupSystem(edit(after, (d) => void (d.resources.wood = RESOURCES.cap))).drops[0]!.pos).toEqual(drop.pos);
+    const fullAfter = editPlausible(after, (d) => void (d.resources.wood = RESOURCES.cap));
+    expectValid(pickupSystem(fullAfter));
+    expect(pickupSystem(fullAfter).drops[0]!.pos).toEqual(drop.pos);
   });
 
   it("ne mute pas l'état inspecté", () => {
     const s = deepFreeze(midGame());
     expect(() => checkInvariants(s)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Invariants ajoutés pour la sauvegarde (docs/design/save.md §5). Chaque corruption doit produire
+// une violation précise (regex), pas seulement « une erreur quelconque ».
+// ---------------------------------------------------------------------------
+
+/** Tête de file arrivée à sa place (statut queued, chemin vide). */
+function queuedState(): GameState {
+  const s = withHeadQueued();
+  expect(s.survivors.find((v) => v.id === s.queue[0])?.status).toBe("queued");
+  return s;
+}
+
+/** Un survivant au repos dans la tente initiale (joueur resté sur W). */
+function restingState(): GameState {
+  return runUntil(place(withHeadQueued(), fresh().map.welcome), (s) => s.survivors.some((v) => v.status === "resting"), 600);
+}
+
+/** Un survivant qui repart vers l'entrée avec un chemin d'au moins 2 tuiles. */
+function leavingState(): GameState {
+  return runUntil(restingState(), (s) => s.survivors.some((v) => v.status === "leaving" && v.path.length >= 2), 600);
+}
+
+const resting = (d: GameState) => d.survivors.find((v) => v.status === "resting")!;
+const leaving = (d: GameState) => d.survivors.find((v) => v.status === "leaving")!;
+
+type Corruption = [name: string, corrupt: (d: GameState) => void, expected: RegExp];
+
+const saveCorruptions: [base: string, make: () => GameState, list: Corruption[]][] = [
+  [
+    "milieu de partie",
+    midGame,
+    [
+      // RNG : entier 32 bits non signé (rng.ts : seed >>> 0).
+      ["rng négatif", (d) => void (d.rng = -1), /^rng invalide/],
+      ["rng = 2^32", (d) => void (d.rng = 2 ** 32), /^rng invalide/],
+      ["rng non entier", (d) => void (d.rng = 1.5), /^rng invalide/],
+      ["rng NaN", (d) => void (d.rng = NaN), /^rng invalide/],
+      // Compteurs bornés.
+      ["commandsThisTick > LIMITS", (d) => void (d.commandsThisTick = LIMITS.maxCommandsPerTick + 1), /^commandsThisTick/],
+      [
+        "spawnTimer > max(firstSpawnTicks, spawnIntervalMax)",
+        (d) => void (d.spawnTimer = Math.max(SURVIVOR.firstSpawnTicks, SURVIVOR.spawnIntervalMax) + 1),
+        /^spawnTimer/,
+      ],
+      ["welcomeProgress = WELCOME.ticks", (d) => void (d.welcomeProgress = WELCOME.ticks), /^welcomeProgress/],
+      ["payCooldown > payIntervalTicks - 1", (d) => void (d.buildSlots[1]!.payCooldown = BUILD.payIntervalTicks), /payCooldown/],
+      ["cleanProgress > 0 sur une tente libre", (d) => void (d.tents[1]!.cleanProgress = 1), /cleanProgress/],
+      [
+        "cleanProgress = cleanTicks sur une tente en désordre",
+        (d) => {
+          d.tents[1]!.status = "messy";
+          d.tents[1]!.cleanProgress = TENT.cleanTicks;
+        },
+        /cleanProgress/,
+      ],
+      // Entrée joueur.
+      ["input dx = 2", (d) => void ((d.player.input as { dx: number }).dx = 2), /^player\.input/],
+      ["input dy = 0.5", (d) => void ((d.player.input as { dy: number }).dy = 0.5), /^player\.input/],
+      // Tri par id.
+      [
+        "survivants dans le désordre",
+        (d) => void (d.survivors = [d.survivors[1]!, d.survivors[0]!, ...d.survivors.slice(2)]),
+        /survivants non triés/,
+      ],
+      ["tentes dans le désordre", (d) => void (d.tents = [d.tents[1]!, d.tents[0]!, ...d.tents.slice(2)]), /tentes non triées/],
+      // Emplacements conformes à la carte.
+      ["slot cost: 1", (d) => void (d.buildSlots[1]!.cost = 1), /slot \d+: coût 1 au lieu de/],
+      [
+        "coûts de slots échangés",
+        (d) => {
+          d.buildSlots[1]!.cost = BUILD.slotCosts[2]!;
+          d.buildSlots[2]!.cost = BUILD.slotCosts[1]!;
+        },
+        /coût/,
+      ],
+      ["slot déplacé", (d) => void (d.buildSlots[1]!.tile = { tx: 3, ty: 3 }), /slot \d+: tuile/],
+      ["slot supprimé", (d) => void d.buildSlots.pop(), /nombre d'emplacements/],
+      [
+        "slot en trop",
+        (d) => void d.buildSlots.push({ ...d.buildSlots[1]!, tile: { tx: 3, ty: 3 }, id: d.nextId++ }),
+        /nombre d'emplacements/,
+      ],
+      // Tentes conformes à la carte.
+      ["tente initiale déplacée", (d) => void (d.tents[0]!.tile = { tx: 3, ty: 3 }), /tente \d+: tuile .* ni tente initiale/],
+      ["deux tentes sur la même tuile", (d) => void (d.tents[1]!.tile = { ...d.tents[0]!.tile }), /plusieurs tentes sur la tuile/],
+      // Chemins des survivants.
+      ["chemin : tuile hors carte", (d) => void (walker(d).path[1] = { tx: -1, ty: 3 }), /hors carte ou non entière/],
+      ["chemin : tuile non entière", (d) => void (walker(d).path[1] = { tx: 1.5, ty: 3 }), /hors carte ou non entière/],
+      ["chemin : tuile non praticable (arbre)", (d) => void (walker(d).path[1] = { tx: 0, ty: 0 }), /non praticable/],
+      ["chemin : tuile non praticable (rocher)", (d) => void (walker(d).path[1] = { tx: 5, ty: 4 }), /non praticable/],
+      ["chemin : saut (tuile manquante)", (d) => void walker(d).path.splice(1, 1), /non contigu/],
+      [
+        "survivant téléporté loin de son pas",
+        (d) => void (walker(d).pos = tileCenter({ tx: 3, ty: 3 })),
+        /non alignée/,
+      ],
+      [
+        "survivant en diagonale de son pas",
+        (d) => {
+          const w = walker(d);
+          w.pos = { x: w.pos.x + 1, y: w.pos.y + 1 };
+        },
+        /non alignée/,
+      ],
+      ["survivant dans un rocher", (d) => void (walker(d).pos = tileCenter({ tx: 5, ty: 4 })), /sur une tuile non praticable/],
+      ["marche vers une autre tuile que sa tente", (d) => void walker(d).path.pop(), /pas vers sa tente/],
+      ["en route vers la file sans chemin", (d) => void (queued(d).path = []), /pas vers sa place de file/],
+      ["statut inconnu", (d) => void ((walker(d) as { status: string }).status = "dancing"), /statut inconnu/],
+      // Plausibilité.
+      ["drop de bois de 999 999 au tick courant", (d) => void (d.drops[0]!.amount = 999_999), /^plausibilité wood/],
+      [
+        "nourriture au-delà du plausible",
+        (d) => void (d.resources.food = plausibleMax(d, "food") + 1),
+        /^plausibilité food/,
+      ],
+      [
+        "drop de nourriture au-delà du plausible",
+        (d) =>
+          void d.drops.push({ id: d.nextId++, pos: tileCenter({ tx: 9, ty: 6 }), resource: "food", amount: plausibleMax(d, "food") }),
+        /^plausibilité food/,
+      ],
+      ["même état, tick remis à 0", (d) => void (d.tick = 0), /^plausibilité wood/],
+      // Ressources que rien ne produit (PLAUSIBILITY.<res>PerTick = 0) : plafond = stock de départ.
+      ["pièces au-dessus du départ (re-signé coins 9999)", (d) => void (d.resources.coins = 9999), /^plausibilité coins/],
+      ["pièces : départ + 1", (d) => void (d.resources.coins = STARTING_RESOURCES.coins + 1), /^plausibilité coins/],
+      ["pierre : départ + 1", (d) => void (d.resources.stone = STARTING_RESOURCES.stone + 1), /^plausibilité stone/],
+      ["eau : départ + 1", (d) => void (d.resources.water = STARTING_RESOURCES.water + 1), /^plausibilité water/],
+      ["pièces au-dessus du départ même à un tick énorme", (d) => {
+        d.tick = 1_000_000_000;
+        d.resources.coins = STARTING_RESOURCES.coins + 1;
+      }, /^plausibilité coins/],
+    ],
+  ],
+  [
+    "tête de file arrivée",
+    queuedState,
+    [
+      [
+        "en file mais décalé de sa place",
+        (d) => {
+          const h = queued(d);
+          h.pos = { x: h.pos.x + 1, y: h.pos.y };
+        },
+        /en file mais pas à sa place/,
+      ],
+      ["en file avec un chemin", (d) => void (queued(d).path = [{ tx: 8, ty: 10 }]), /en file mais pas à sa place/],
+    ],
+  ],
+  [
+    "survivant au repos",
+    restingState,
+    [
+      ["restTicksLeft > SURVIVOR.restTicks", (d) => void (resting(d).restTicksLeft = SURVIVOR.restTicks + 1), /restTicksLeft invalide/],
+      ["au repos hors de sa tente", (d) => void (resting(d).pos = tileCenter({ tx: 2, ty: 3 })), /au repos hors de sa tente/],
+    ],
+  ],
+  [
+    "survivant qui repart",
+    leavingState,
+    [["part vers une autre tuile que l'entrée", (d) => void leaving(d).path.pop(), /pas vers l'entrée/]],
+  ],
+];
+
+describe("checkInvariants — invariants de sauvegarde (save.md §5)", () => {
+  for (const [baseName, make, list] of saveCorruptions) {
+    describe(baseName, () => {
+      const base = make();
+
+      it("l'état de base est valide", () => expectValid(base));
+
+      for (const [name, corrupt, expected] of list) {
+        it(`détecte : ${name}`, () => {
+          const errors = checkInvariants(edit(base, corrupt));
+          expect(errors.some((e) => expected.test(e)), `aucune erreur ${String(expected)} dans ${JSON.stringify(errors)}`).toBe(
+            true,
+          );
+        });
+      }
+    });
+  }
+
+  const base = midGame();
+
+  it("bornes valides : rng 0 et 2^32 - 1, commandsThisTick = LIMITS, spawnTimer max, welcomeProgress max - 1", () => {
+    expectValid(edit(base, (d) => void (d.rng = 0)));
+    expectValid(edit(base, (d) => void (d.rng = 2 ** 32 - 1)));
+    expectValid(edit(base, (d) => void (d.commandsThisTick = LIMITS.maxCommandsPerTick)));
+    expectValid(
+      edit(base, (d) => void (d.spawnTimer = Math.max(SURVIVOR.firstSpawnTicks, SURVIVOR.spawnIntervalMax))),
+    );
+    expectValid(edit(base, (d) => void (d.welcomeProgress = WELCOME.ticks - 1)));
+  });
+
+  it("bornes valides : tente en désordre à cleanTicks - 1, repos à SURVIVOR.restTicks", () => {
+    expectValid(
+      edit(base, (d) => {
+        d.tents[1]!.status = "messy";
+        d.tents[1]!.cleanProgress = TENT.cleanTicks - 1;
+      }),
+    );
+    expectValid(edit(restingState(), (d) => void (resting(d).restTicksLeft = SURVIVOR.restTicks)));
+  });
+
+  it("le RNG produit par rng.ts reste dans [0, 2^32 - 1] (seeds extrêmes)", () => {
+    for (const seed of [0, 1, 2 ** 31, 2 ** 32 - 1, -1, 2 ** 40 + 3]) {
+      expectValid(run(fresh(seed), 30));
+    }
+  });
+
+  it("plausibilité : la limite est exactement départ + tick × PLAUSIBILITY (bornes incluse / exclue)", () => {
+    for (const r of ["wood", "food", "stone", "water", "coins"] as const) {
+      const at = edit(base, (d) => {
+        d.resources[r] += plausibleMax(d, r) - heldTotal(d, r);
+      });
+      expect(heldTotal(at, r)).toBe(plausibleMax(at, r));
+      expectValid(at);
+      const over = edit(at, (d) => void (d.resources[r] += 1));
+      expect(checkInvariants(over).some((e) => e.startsWith(`plausibilité ${r}`))).toBe(true);
+    }
+    expect(plausibleMax(base, "wood")).toBe(STARTING_RESOURCES.wood + base.tick * PLAUSIBILITY.woodPerTick);
+    expect(plausibleMax(base, "food")).toBe(STARTING_RESOURCES.food + base.tick * PLAUSIBILITY.foodPerTick);
+  });
+
+  it("plausibilité : pierre, eau, pièces (PerTick = 0) : égal au départ ⇒ accepté, au-dessus ⇒ rejeté, à tout tick", () => {
+    for (const r of ["stone", "water", "coins"] as const) {
+      expect(PLAUSIBILITY[`${r}PerTick`]).toBe(0);
+      for (const t of [0, base.tick, 1_000_000]) {
+        const at = edit(base, (d) => {
+          d.tick = Math.max(t, d.tick); // ne pas rendre bois/nourriture implausibles
+          d.resources[r] = STARTING_RESOURCES[r];
+        });
+        expect(plausibleMax(at, r)).toBe(STARTING_RESOURCES[r]);
+        expect(heldTotal(at, r)).toBe(STARTING_RESOURCES[r]);
+        expectValid(at);
+        const over = edit(at, (d) => void (d.resources[r] = STARTING_RESOURCES[r] + 1));
+        expect(checkInvariants(over).filter((e) => e.startsWith("plausibilité"))).toEqual([
+          `plausibilité ${r}: ${STARTING_RESOURCES[r] + 1} détenu > ${STARTING_RESOURCES[r]} possible au tick ${over.tick}`,
+        ]);
+      }
+    }
+  });
+
+  it("plausibilité : le bois versé dans les chantiers compte (le déplacer du stock au chantier ne change rien)", () => {
+    const s = edit(base, (d) => void (d.resources.wood = 7));
+    const moved = edit(s, (d) => {
+      d.resources.wood -= 4;
+      d.buildSlots[1]!.paid += 4;
+    });
+    expect(heldTotal(moved, "wood")).toBe(heldTotal(s, "wood"));
+    // Bois versé au-delà du plausible : tick ramené juste sous ce qu'exige le total détenu.
+    const tooEarly = edit(moved, (d) => {
+      d.tick = Math.ceil((heldTotal(d, "wood") - STARTING_RESOURCES.wood) / PLAUSIBILITY.woodPerTick) - 1;
+    });
+    expect(checkInvariants(tooEarly).some((e) => e.startsWith("plausibilité wood"))).toBe(true);
+  });
+
+  it("plausibilité : un état initial (tick 0) est plausible", () => {
+    expectValid(fresh());
+    expect(heldTotal(fresh(), "wood")).toBe(STARTING_RESOURCES.wood);
+    expect(heldTotal(fresh(), "food")).toBe(STARTING_RESOURCES.food);
+  });
+
+  it("toutes les violations sont détectées sans exception sur un état très corrompu", () => {
+    const bad = edit(base, (d) => {
+      d.rng = -5;
+      d.survivors.reverse();
+      d.tents.reverse();
+      walker(d).path = [{ tx: 99, ty: 99 }];
+    });
+    expect(() => checkInvariants(bad)).not.toThrow();
+    expect(checkInvariants(bad).length).toBeGreaterThan(3);
+  });
+});
+
+describe("referenceMap", () => {
+  it("égale à la carte de createInitialState, même instance pour toutes les parties", () => {
+    const ref = referenceMap();
+    expect(fresh(1).map).toEqual(ref);
+    expect(fresh(1).map).toBe(ref);
+    expect(fresh(2).map).toBe(ref);
+    expect(referenceMap()).toBe(ref);
+    expect(ref).toEqual(parseMap(MAP_LAYOUT).map);
+  });
+
+  it("gelée en profondeur : aucune mutation possible", () => {
+    const ref = referenceMap();
+    expect(Object.isFrozen(ref)).toBe(true);
+    expect(Object.isFrozen(ref.tiles)).toBe(true);
+    expect(Object.isFrozen(ref.queueTiles)).toBe(true);
+    expect(ref.queueTiles.every((t) => Object.isFrozen(t))).toBe(true);
+    expect(Object.isFrozen(ref.entrance) && Object.isFrozen(ref.welcome)).toBe(true);
+    expect(() => {
+      (ref.tiles as string[])[0] = "grass";
+    }).toThrow(TypeError);
+    expect(ref.tiles[0]).toBe("tree");
+  });
+
+  it("un état rechargé sans carte puis reconstruit avec referenceMap() est valide et identique", () => {
+    const s = midGame();
+    const saved = JSON.parse(JSON.stringify(s)) as Partial<GameState>;
+    delete saved.map;
+    expect("map" in saved).toBe(false);
+    const reloaded = { ...saved, map: referenceMap() } as GameState;
+    expect(reloaded).toEqual(s);
+    expectValid(reloaded);
+  });
+
+  it("est exportée par l'index du core (avec heldTotal / plausibleMax)", () => {
+    expect(coreIndex.referenceMap).toBe(referenceMap);
+    expect(coreIndex.heldTotal).toBe(heldTotal);
+    expect(coreIndex.plausibleMax).toBe(plausibleMax);
   });
 });
 

@@ -26,8 +26,9 @@ body {
 #hud {
   position: absolute;
   top: calc(8px + env(safe-area-inset-top));
-  left: 8px;
-  right: 8px;
+  /* Marges symétriques : laisse la place au bouton Menu (haut droite) sans décentrer le HUD. */
+  left: 60px;
+  right: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -95,6 +96,212 @@ body {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.75);
   transform: translate(-50%, -50%);
+}
+
+/* --- Menu ------------------------------------------------------------------------------------ */
+
+.menu-toggle {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top));
+  right: calc(8px + env(safe-area-inset-right));
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.menu-toggle:focus-visible,
+.menu-item:focus-visible,
+.notice-close:focus-visible {
+  outline: 3px solid #ffd23f;
+  outline-offset: 2px;
+}
+
+.menu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  touch-action: none;
+}
+
+.menu-backdrop[hidden] {
+  display: none;
+}
+
+.menu-panel {
+  width: min(360px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 14px;
+  background: #1f2a1c;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.menu-panel:focus {
+  outline: none;
+}
+
+.menu-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.menu-actions,
+.menu-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-actions[hidden],
+.menu-confirm[hidden],
+.menu-item[hidden] {
+  display: none;
+}
+
+.menu-item {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  background: #34492e;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.menu-item:hover:not(:disabled) {
+  background: #41593a;
+}
+
+.menu-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.menu-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
+.menu-note[hidden] {
+  display: none;
+}
+
+.menu-secondary {
+  background: transparent;
+}
+
+.menu-danger {
+  background: #8c2f22;
+}
+
+.menu-danger:hover:not(:disabled) {
+  background: #a3392a;
+}
+
+.menu-confirm-text {
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+
+.menu-confirm-row {
+  display: flex;
+  gap: 8px;
+}
+
+.menu-confirm-row .menu-item {
+  flex: 1;
+  text-align: center;
+}
+
+/* --- Notifications ------------------------------------------------------------------------- */
+
+#notices {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* Ne gêne pas le joystick : seuls les boutons captent le doigt. */
+  pointer-events: none;
+}
+
+.notice-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(120, 40, 20, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.notice-banner[hidden] {
+  display: none;
+}
+
+.notice-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.notice-close[hidden] {
+  display: none;
+}
+
+.notice-toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.notice-toast {
+  max-width: 480px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 14px;
 }
 
 @media (max-width: 480px) {

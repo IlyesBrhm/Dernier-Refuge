@@ -25,6 +25,11 @@ export interface InputController {
   read(): MoveInput;
   /** Relâche toutes les touches (perte de focus, onglet caché). */
   releaseAll(): void;
+  /**
+   * Désactivé (menu ouvert) : touches et joystick ignorés, direction nulle, aucune touche interceptée
+   * (les flèches restent utilisables dans le menu).
+   */
+  setEnabled(enabled: boolean): void;
   dispose(): void;
 }
 
@@ -39,9 +44,10 @@ function axisOf(neg: boolean, pos: boolean): Axis {
 
 export function createInput(target: Window, joystick: Joystick | null): InputController {
   const pressed = new Set<string>();
+  let enabled = true;
 
   const onKeyDown = (e: KeyboardEvent): void => {
-    if (!HANDLED.has(e.code)) return;
+    if (!enabled || !HANDLED.has(e.code)) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault(); // pas de défilement de page avec les flèches
     pressed.add(e.code);
@@ -66,6 +72,7 @@ export function createInput(target: Window, joystick: Joystick | null): InputCon
 
   return {
     read(): MoveInput {
+      if (!enabled) return { dx: 0, dy: 0 };
       const touch = joystick?.readAxis();
       if (touch) return touch;
       return {
@@ -74,6 +81,10 @@ export function createInput(target: Window, joystick: Joystick | null): InputCon
       };
     },
     releaseAll,
+    setEnabled(next: boolean): void {
+      enabled = next;
+      releaseAll();
+    },
     dispose(): void {
       target.removeEventListener("keydown", onKeyDown);
       target.removeEventListener("keyup", onKeyUp);

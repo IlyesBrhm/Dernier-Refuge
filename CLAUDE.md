@@ -1,4 +1,4 @@
-# Mod Survie — instructions pour Claude
+# Dernier Refuge — instructions pour Claude
 
 Jeu de gestion-survie 2D vue de dessus dans le navigateur (inspiré de My Perfect Hotel).
 Cahier des charges : @docs/SPEC.md — Avancement : @docs/ROADMAP.md

@@ -1,8 +1,8 @@
 // Utilitaires de test pour le cœur logique (pas un fichier de test).
 
-import { NODES, PLAYER, STARTING_RESOURCES, SURVIVOR, WORLD } from "../../src/data/balance";
+import { NODES, PLAUSIBILITY, PLAYER, STARTING_RESOURCES, SURVIVOR, WORLD } from "../../src/data/balance";
 import { applyCommand } from "../../src/core/commands";
-import { checkInvariants } from "../../src/core/invariants";
+import { checkInvariants, heldTotal } from "../../src/core/invariants";
 import { isWalkable, tileCenter, tileOf, sameTile } from "../../src/core/map";
 import { findPath } from "../../src/core/path";
 import {
@@ -28,11 +28,43 @@ export function place(state: GameState, tile: TilePos): GameState {
   return s;
 }
 
-/** Fixture : modifie une copie de l'état. */
+/**
+ * Fixture : modifie une copie de l'état et RIEN d'autre (en particulier `tick` n'est jamais touché).
+ * Si la fixture gonfle des stocks, elle doit soit fixer elle-même `d.tick` (préféré, lisible),
+ * soit passer explicitement par `editPlausible`.
+ */
 export function edit(state: GameState, fn: (draft: GameState) => void): GameState {
   const s = cloneState(state);
   fn(s);
   return s;
+}
+
+/**
+ * Fixture explicite aux stocks gonflés : applique `fn` comme `edit`, PUIS avance `tick` au minimum
+ * nécessaire pour que bois et nourriture restent plausibles (invariant de plausibilité,
+ * docs/design/save.md §5). `tick` n'est jamais reculé et n'est modifié que si l'état serait sinon
+ * implausible.
+ *
+ * Attention : avancer `tick` peut changer tout ce qui en dépend (saison, jour/nuit au Jalon 4). À
+ * réserver aux fixtures qui ont réellement besoin de stocks gonflés. Sur un état issu d'une
+ * simulation, l'ajustement pourrait masquer une duplication de ressources à l'invariant de
+ * plausibilité : le test doit alors vérifier lui-même la conservation (ledgerDeltaErrors, totaux).
+ */
+export function editPlausible(state: GameState, fn: (draft: GameState) => void): GameState {
+  const s = edit(state, fn);
+  s.tick = plausibleTick(s);
+  return s;
+}
+
+/** Plus petit `tick` ≥ `state.tick` pour lequel bois et nourriture détenus sont plausibles. */
+export function plausibleTick(state: GameState): number {
+  const perTick: Record<DropResource, number> = { wood: PLAUSIBILITY.woodPerTick, food: PLAUSIBILITY.foodPerTick };
+  let t = state.tick;
+  for (const r of ["wood", "food"] as const) {
+    const excess = heldTotal(state, r) - STARTING_RESOURCES[r];
+    if (Number.isSafeInteger(excess) && excess > 0) t = Math.max(t, Math.ceil(excess / perTick[r]));
+  }
+  return t;
 }
 
 export function expectValid(state: GameState): void {

@@ -13,9 +13,9 @@
 - [x] HUD ressources
 
 ## Jalon 2 — Sauvegarde
-- [ ] Format versionné + checksum + double slot
-- [ ] Autosave + export/import
-- [ ] Validation des invariants au chargement
+- [x] Format versionné + checksum + double slot
+- [x] Autosave + export/import
+- [x] Validation des invariants au chargement
 
 ## Jalon 3 — Construction & automatisation
 - [ ] Zones de construction à remplir progressivement
@@ -34,3 +34,4 @@
 - [ ] Simulation headless `npm run sim` pour l'équilibrage
 - [ ] Sons, particules, tutoriel
 - [ ] Progression hors-ligne plafonnée
+  - Note : détection d'horloge trafiquée à faire avec le cycle jour/nuit.

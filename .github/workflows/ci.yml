@@ -17,4 +17,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      # Vérifie que le générateur reproduit exactement les fixtures v1 figées (sans rien écrire).
+      - run: npx vitest run tests/save/fixture-generate.test.ts
+        env:
+          CHECK_SAVE_FIXTURES: "1"
       - run: npm run build

@@ -1,10 +1,10 @@
 import { PICKUP, RESOURCES } from "../../src/data/balance";
 import type { GameState, Vec } from "../../src/core/state";
-import { edit, fresh, run } from "./helpers";
+import { edit, editPlausible, fresh, run } from "./helpers";
 
-/** Joueur en `player`, un drop de `amount` bois en `at`, bois du joueur = `wood`. */
+/** Joueur en `player`, un drop de `amount` bois en `at`, bois du joueur = `wood` (tick rendu plausible). */
 function scene(player: Vec, at: Vec, amount: number, wood = 0): GameState {
-  return edit(fresh(), (d) => {
+  return editPlausible(fresh(), (d) => {
     d.player.pos = { ...player };
     d.resources.wood = wood;
     d.drops.push({ id: d.nextId++, pos: { ...at }, resource: "wood", amount });
@@ -92,7 +92,7 @@ describe("ramassage par ressource", () => {
   const player = { x: 3000, y: 3500 };
 
   it("un drop de nourriture est crédité dans food (pas dans wood)", () => {
-    const s0 = edit(fresh(), (d) => {
+    const s0 = editPlausible(fresh(), (d) => {
       d.player.pos = { ...player };
       d.drops.push({ id: d.nextId++, pos: { ...player }, resource: "food", amount: 4 });
     });
@@ -104,7 +104,7 @@ describe("ramassage par ressource", () => {
 
   it("un stock de bois plein n'empêche pas l'aimantation ni la collecte de nourriture", () => {
     const near = { x: player.x + PICKUP.magnetRadius, y: player.y };
-    const s0 = edit(fresh(), (d) => {
+    const s0 = editPlausible(fresh(), (d) => {
       d.player.pos = { ...player };
       d.resources.wood = RESOURCES.cap;
       d.resources.food = 0;
@@ -118,7 +118,7 @@ describe("ramassage par ressource", () => {
   });
 
   it("nourriture pleine : collecte partielle, le reste reste au sol", () => {
-    const s0 = edit(fresh(), (d) => {
+    const s0 = editPlausible(fresh(), (d) => {
       d.player.pos = { ...player };
       d.resources.food = RESOURCES.cap - 1;
       d.drops.push({ id: d.nextId++, pos: { ...player }, resource: "food", amount: 5 });

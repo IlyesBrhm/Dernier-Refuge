@@ -1,6 +1,6 @@
 // Parseur de carte et utilitaires de tuiles (purs).
 
-import { WORLD, type NodeKind } from "../data/balance";
+import { MAP_LAYOUT, WORLD, type NodeKind } from "../data/balance";
 import type { MapState, Tile, TilePos, Vec } from "./state";
 
 export interface ParsedNode {
@@ -99,6 +99,25 @@ export function parseMap(layout: readonly string[]): ParsedMap {
     playerStart: p,
     nodes,
   };
+}
+
+function deepFreeze<T>(o: T): T {
+  if (o !== null && typeof o === "object" && !Object.isFrozen(o)) {
+    Object.freeze(o);
+    for (const v of Object.values(o as Record<string, unknown>)) deepFreeze(v);
+  }
+  return o;
+}
+
+const REF_MAP_CACHE: { map?: MapState } = {};
+
+/**
+ * Carte de référence `parseMap(MAP_LAYOUT).map`, calculée une seule fois (au premier appel) et gelée
+ * en profondeur. Instance unique partagée par tous les états (createInitialState, chargement de
+ * sauvegarde) : la carte est statique et n'est jamais sérialisée (docs/design/save.md §2).
+ */
+export function referenceMap(): MapState {
+  return (REF_MAP_CACHE.map ??= deepFreeze(parseMap(MAP_LAYOUT).map));
 }
 
 export function manhattan(a: TilePos, b: TilePos): number {

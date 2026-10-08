@@ -1,4 +1,4 @@
-# Mod Survie — Cahier des charges
+# Dernier Refuge — Cahier des charges
 
 ## Pitch
 Jeu de gestion-survie en 2D vue de dessus, jouable dans le navigateur, inspiré de **My Perfect Hotel** :

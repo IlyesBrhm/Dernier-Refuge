@@ -9,7 +9,7 @@ import {
   type DropResource,
   type NodeKind,
 } from "../data/balance";
-import { parseMap, tileCenter } from "./map";
+import { parseMap, referenceMap, tileCenter } from "./map";
 import { seedRng, type RngState } from "./rng";
 
 export type ResourceId = "wood" | "food" | "stone" | "water" | "coins";
@@ -141,7 +141,7 @@ export function createInitialState(seed: number): GameState {
     tick: 0,
     rng: seedRng(seed),
     nextId,
-    map: parsed.map,
+    map: referenceMap(), // instance unique, gelée, partagée (identique à parsed.map)
     player: { pos: tileCenter(parsed.playerStart), input: { dx: 0, dy: 0 } },
     resources: { ...STARTING_RESOURCES },
     queue: [],

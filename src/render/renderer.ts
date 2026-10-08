@@ -102,6 +102,8 @@ export interface Renderer {
   /** À appeler une fois par tick simulé (détection d'événements visuels, ex. récolte). */
   onTick(prev: Readonly<GameState>, curr: Readonly<GameState>): void;
   draw(prev: Readonly<GameState>, curr: Readonly<GameState>, alpha: number): void;
+  /** Oublie les effets en cours (l'état vient d'être remplacé). */
+  reset(): void;
 }
 
 export function createRenderer(canvas: HTMLCanvasElement): Renderer {
@@ -531,6 +533,10 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   return {
     onTick(prev, curr): void {
       fx.onTick(prev, curr, performance.now());
+    },
+
+    reset(): void {
+      fx.reset();
     },
 
     draw(prev, curr, alpha): void {

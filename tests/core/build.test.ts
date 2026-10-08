@@ -1,13 +1,14 @@
 import { BUILD, STARTING_RESOURCES, WELCOME } from "../../src/data/balance";
 import { slotRemaining } from "../../src/core/selectors";
 import type { GameState } from "../../src/core/state";
-import { edit, fresh, place, run, runUntil } from "./helpers";
+import { edit, editPlausible, fresh, place, run, runUntil } from "./helpers";
 
 const paidTotal = (s: GameState) => s.buildSlots.reduce((a, b) => a + b.paid, 0);
 
+/** Joueur sur l'emplacement 0 avec `wood` bois (tick avancé si besoin pour rester plausible). */
 function onSlot0(wood: number): GameState {
   const s = fresh();
-  return edit(place(s, s.buildSlots[0]!.tile), (d) => {
+  return editPlausible(place(s, s.buildSlots[0]!.tile), (d) => {
     d.resources.wood = wood;
   });
 }

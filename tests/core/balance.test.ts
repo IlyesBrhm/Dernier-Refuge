@@ -11,6 +11,7 @@ import {
   NODES,
   OFFLINE,
   PICKUP,
+  PLAUSIBILITY,
   PLAYER,
   QUEUE,
   RESOURCES,
@@ -37,12 +38,19 @@ function numericLeaves(v: unknown, path: string, out: [string, number][] = []): 
   return out;
 }
 
-/** Feuilles autorisées à valoir 0 (stock de départ nul). Toutes les autres doivent être ≥ 1. */
-const ZERO_ALLOWED = new Set(
-  Object.entries(STARTING_RESOURCES)
+/** Ressources qu'aucun système ne produit encore (ni nœud, ni récompense de survivant). */
+const UNPRODUCED = ["stone", "water", "coins"] as const;
+
+/**
+ * Feuilles autorisées à valoir 0 : stocks de départ nuls, et plausibilité des ressources que rien
+ * ne produit. Toutes les autres doivent être ≥ 1.
+ */
+const ZERO_ALLOWED = new Set([
+  ...Object.entries(STARTING_RESOURCES)
     .filter(([, v]) => v === 0)
     .map(([k]) => `STARTING_RESOURCES.${k}`),
-);
+  ...UNPRODUCED.map((r) => `PLAUSIBILITY.${r}PerTick`),
+]);
 
 describe("balance — règle générale", () => {
   const leaves = Object.entries(balance).flatMap(([name, v]) => numericLeaves(v, name));
@@ -151,6 +159,57 @@ describe("balance — cohérences entre constantes", () => {
       expect(BUILD.slotCosts[i]!).toBeGreaterThan(BUILD.slotCosts[i - 1]!);
     }
     for (const c of BUILD.slotCosts) expect(c).toBeLessThanOrEqual(RESOURCES.cap);
+  });
+});
+
+describe("balance — plausibilité (anti-triche, docs/design/save.md §5)", () => {
+  // Borne théorique du rythme de production honnête, en unités par tick (asymptotique) :
+  // - récolte : un seul joueur, une seule cible par tick (+1 de progression) ⇒ au plus
+  //   max(yield / harvestTicks) sur les nœuds qui produisent la ressource ;
+  // - récompense des survivants (bois) : un départ par survivant arrivé, donc au plus
+  //   woodReward / spawnIntervalMin, et au plus (nombre de tentes) × woodReward / restTicks.
+  const harvestRate = (res: "wood" | "food"): number =>
+    Math.max(0, ...Object.values(NODES).filter((n) => n.resource === res).map((n) => n.yield / n.harvestTicks));
+  const tentCount = (MAP_LAYOUT.join("").split("T").length - 1) + BUILD.slotCosts.length;
+  const survivorRate = Math.min(
+    SURVIVOR.woodReward / SURVIVOR.spawnIntervalMin,
+    (tentCount * SURVIVOR.woodReward) / SURVIVOR.restTicks,
+  );
+  const MARGIN = 2;
+
+  it(`PLAUSIBILITY.woodPerTick ≥ ${MARGIN} × borne théorique (récolte + survivants)`, () => {
+    const bound = harvestRate("wood") + survivorRate;
+    expect(bound).toBeGreaterThan(0);
+    expect(
+      PLAUSIBILITY.woodPerTick,
+      `borne bois ${bound.toFixed(3)}/tick : une feature a rendu le jeu plus rapide, relever PLAUSIBILITY.woodPerTick`,
+    ).toBeGreaterThanOrEqual(MARGIN * bound);
+  });
+
+  it(`PLAUSIBILITY.foodPerTick ≥ ${MARGIN} × borne théorique (récolte)`, () => {
+    const bound = harvestRate("food");
+    expect(bound).toBeGreaterThan(0);
+    expect(
+      PLAUSIBILITY.foodPerTick,
+      `borne nourriture ${bound.toFixed(3)}/tick : une feature a rendu le jeu plus rapide, relever PLAUSIBILITY.foodPerTick`,
+    ).toBeGreaterThanOrEqual(MARGIN * bound);
+  });
+
+  it("une entrée <res>PerTick par ressource du stock, et rien d'autre", () => {
+    expect(Object.keys(PLAUSIBILITY).sort()).toEqual(Object.keys(STARTING_RESOURCES).map((r) => `${r}PerTick`).sort());
+  });
+
+  it("pierre, eau, pièces : aucun système ne les produit encore ⇒ PerTick vaut exactement 0", () => {
+    // Producteurs actuels : nœuds (NODES.*.resource) et récompense des survivants (bois).
+    const produced = new Set<string>(["wood", ...Object.values(NODES).map((n) => n.resource)]);
+    for (const r of UNPRODUCED) {
+      expect(produced.has(r), `${r} est maintenant produit : relever PLAUSIBILITY.${r}PerTick et adapter ce test`).toBe(false);
+      expect(PLAUSIBILITY[`${r}PerTick`], `PLAUSIBILITY.${r}PerTick`).toBe(0);
+    }
+    // Et les ressources produites ont bien une borne non nulle.
+    for (const r of produced) {
+      expect(PLAUSIBILITY[`${r}PerTick` as keyof typeof PLAUSIBILITY], `PLAUSIBILITY.${r}PerTick`).toBeGreaterThan(0);
+    }
   });
 });
 

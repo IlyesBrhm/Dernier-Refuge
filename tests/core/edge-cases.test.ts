@@ -9,7 +9,7 @@ import { doorOf, sameTile, tileCenter, tileOf } from "../../src/core/map";
 import { stepBudget } from "../../src/core/loop-budget";
 import type { GameState, TilePos } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
-import { deepFreeze, edit, expectValid, fresh, move, place, run, runUntil, steer, withHeadQueued } from "./helpers";
+import { deepFreeze, edit, editPlausible, expectValid, fresh, move, place, run, runUntil, steer, withHeadQueued } from "./helpers";
 
 const onTile = (s: GameState, t: TilePos): boolean => sameTile(tileOf(s.player.pos), t);
 const paidTotal = (s: GameState): number => s.buildSlots.reduce((a, b) => a + b.paid, 0);
@@ -125,7 +125,7 @@ describe("cas limites — ressources insuffisantes", () => {
 
   function onSlot0(wood: number): GameState {
     const s = fresh();
-    return edit(place(s, s.buildSlots[0]!.tile), (d) => {
+    return editPlausible(place(s, s.buildSlots[0]!.tile), (d) => {
       d.resources.wood = wood;
     });
   }
@@ -149,7 +149,7 @@ describe("cas limites — ressources insuffisantes", () => {
   });
 
   it("0 bois puis un drop ramassé sur place : le versement reprend sans quitter la zone", () => {
-    const s0 = edit(onSlot0(0), (d) => {
+    const s0 = editPlausible(onSlot0(0), (d) => {
       d.drops.push({ id: d.nextId++, pos: tileCenter(doorOf(d.buildSlots[0]!.tile)), resource: "wood", amount: cost });
     });
     const total0 = s0.resources.wood + dropTotal(s0) + paidTotal(s0);
@@ -176,7 +176,8 @@ describe("cas limites — stock et drops au plafond", () => {
   function restingWithDoorDrop(amount: number): GameState {
     const base = place(withHeadQueued(), fresh().map.welcome);
     const resting = runUntil(run(base, WELCOME.ticks), (st) => st.tents[0]!.status === "occupied", 300);
-    return edit(resting, (d) => {
+    // État simulé + drop gonflé : editPlausible, la conservation est vérifiée par chaque test (woodTotal).
+    return editPlausible(resting, (d) => {
       d.drops.push({ id: d.nextId++, pos: tileCenter(doorOf(d.tents[0]!.tile)), resource: "wood", amount });
     });
   }
@@ -203,7 +204,7 @@ describe("cas limites — stock et drops au plafond", () => {
 
   it("drop au sol > plafond : la collecte ne remplit le stock que jusqu'au plafond, le reste reste au sol", () => {
     const big = RESOURCES.cap + 50;
-    const s0 = edit(fresh(), (d) => {
+    const s0 = editPlausible(fresh(), (d) => {
       d.resources.wood = 0;
       d.drops.push({ id: d.nextId++, pos: { ...d.player.pos }, resource: "wood", amount: big });
     });
@@ -255,7 +256,7 @@ describe("cas limites — le joueur quitte la zone pendant l'action (commandes u
   });
 
   it("construction : sortir conserve le bois versé, revenir complète sans payer deux fois", () => {
-    const start = edit(fresh(), (d) => {
+    const start = editPlausible(fresh(), (d) => {
       d.resources.wood = 100;
     });
     const tile = start.buildSlots[0]!.tile;
@@ -306,7 +307,7 @@ describe("cas limites — actions répétées très vite", () => {
   });
 
   it("aller-retour sur un emplacement à chaque tick : jamais au-delà du coût, construit une seule fois", () => {
-    const start = edit(fresh(), (d) => {
+    const start = editPlausible(fresh(), (d) => {
       d.resources.wood = 200;
     });
     const tile = start.buildSlots[0]!.tile;

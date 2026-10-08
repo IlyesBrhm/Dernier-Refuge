@@ -21,6 +21,7 @@ import {
   conservationErrors,
   deepFreeze,
   edit,
+  editPlausible,
   emptyProduced,
   expectValid,
   fresh,
@@ -194,7 +195,7 @@ describe("récolte — progression conservée", () => {
 describe("récolte — stock plein (rien n'est détruit)", () => {
   it("bois = cap : récolte terminée, drop de yield sur la tuile du joueur, rien de crédité", () => {
     const s0 = place(fresh(), { tx: 13, ty: 2 });
-    const full = edit(s0, (d) => void (d.resources.wood = RESOURCES.cap));
+    const full = editPlausible(s0, (d) => void (d.resources.wood = RESOURCES.cap));
     let s = full;
     let produced = emptyProduced();
     // Le registre part du stock modifié : on compare par différence.
@@ -212,7 +213,7 @@ describe("récolte — stock plein (rien n'est détruit)", () => {
   });
 
   it("bois = cap - 1 : 1 crédité, yield - 1 au sol", () => {
-    const s0 = edit(besideTree(), (d) => void (d.resources.wood = RESOURCES.cap - 1));
+    const s0 = editPlausible(besideTree(), (d) => void (d.resources.wood = RESOURCES.cap - 1));
     const s = run(s0, TREE.harvestTicks);
     expect(s.resources.wood).toBe(RESOURCES.cap);
     expect(s.drops).toHaveLength(1);
@@ -220,7 +221,7 @@ describe("récolte — stock plein (rien n'est détruit)", () => {
   });
 
   it("deux récoltes stock plein sur la même tuile ⇒ un seul drop de 2 × yield", () => {
-    const s0 = edit(besideTree(), (d) => void (d.resources.wood = RESOURCES.cap));
+    const s0 = editPlausible(besideTree(), (d) => void (d.resources.wood = RESOURCES.cap));
     const s = run(s0, TREE.harvestTicks + regrowDelay(s0, "tree") + TREE.harvestTicks - 1);
     expect(nodeAt(s, TREE_TILE).status).toBe("depleted");
     expect(s.drops).toHaveLength(1);
@@ -228,7 +229,7 @@ describe("récolte — stock plein (rien n'est détruit)", () => {
   });
 
   it("nourriture pleine : le drop de baies reste au sol, le bois n'est pas affecté", () => {
-    const s0 = edit(place(fresh(), { tx: 13, ty: 7 }), (d) => void (d.resources.food = RESOURCES.cap));
+    const s0 = editPlausible(place(fresh(), { tx: 13, ty: 7 }), (d) => void (d.resources.food = RESOURCES.cap));
     const s = run(s0, BUSH.harvestTicks);
     expect(s.resources.food).toBe(RESOURCES.cap);
     expect(s.drops).toEqual([expect.objectContaining({ resource: "food", amount: BUSH.yield })]);
@@ -332,7 +333,7 @@ describe("récolte — cible unique", () => {
 
 describe("drops typés", () => {
   it("bois et nourriture sur la même tuile ⇒ 2 drops, invariants OK", () => {
-    const s = edit(fresh(), (d) => {
+    const s = editPlausible(fresh(), (d) => {
       const at = tileCenter({ tx: 3, ty: 3 });
       d.drops.push({ id: d.nextId++, pos: { ...at }, resource: "wood", amount: 4 });
       d.drops.push({ id: d.nextId++, pos: { ...at }, resource: "food", amount: 2 });
@@ -342,7 +343,7 @@ describe("drops typés", () => {
   });
 
   it("une récolte de baies sur une tuile portant du bois (stocks pleins) ne fusionne pas", () => {
-    const s0 = edit(place(fresh(), { tx: 13, ty: 7 }), (d) => {
+    const s0 = editPlausible(place(fresh(), { tx: 13, ty: 7 }), (d) => {
       d.resources.food = RESOURCES.cap;
       d.resources.wood = RESOURCES.cap;
       d.drops.push({ id: d.nextId++, pos: tileCenter({ tx: 13, ty: 7 }), resource: "wood", amount: 5 });
@@ -356,7 +357,7 @@ describe("drops typés", () => {
 
   it("aimantation d'un drop de bois sur une tuile contenant de la nourriture ⇒ pas de fusion", () => {
     // Joueur au centre de (4,3) ; nourriture au centre de (5,3) ; bois au bord ouest de (6,3), dans le rayon.
-    const s0 = edit(place(fresh(), { tx: 4, ty: 3 }), (d) => {
+    const s0 = editPlausible(place(fresh(), { tx: 4, ty: 3 }), (d) => {
       d.resources.food = RESOURCES.cap; // la nourriture ne bouge pas
       d.resources.wood = 0;
       d.drops.push({ id: d.nextId++, pos: tileCenter({ tx: 5, ty: 3 }), resource: "food", amount: 3 });

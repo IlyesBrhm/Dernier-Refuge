@@ -82,7 +82,11 @@ export type DropResource = "wood" | "food";
 /** Portée de récolte : Chebyshev en tuiles entre la tuile du joueur et celle du nœud (1 = 8 voisines). */
 export const HARVEST = { rangeTiles: 1 } as const;
 
-/** Durées en ticks (10 = 1 s). Ordre de grandeur : 3 arbres => <= 18 bois/min. */
+/**
+ * Durées en ticks (10 = 1 s). Ordre de grandeur : 3 arbres => <= 18 bois/min.
+ * regrowTicks : Borne vérifiée au chargement des sauvegardes : la baisser rend des sauvegardes
+ * honnêtes invalides ⇒ nouvelle version de sauvegarde + migration (voir docs/design/save.md).
+ */
 export const NODES = {
   tree: { resource: "wood", yield: 3, harvestTicks: 20, regrowTicks: 300 }, // 2 s, repousse 30 s
   bush: { resource: "food", yield: 2, harvestTicks: 15, regrowTicks: 200 }, // 1,5 s, repousse 20 s
@@ -94,7 +98,12 @@ export const NODES = {
 /** Vitesses en unités/tick. diagonalSpeed = round(400 / sqrt(2)) par axe. */
 export const PLAYER = { speed: 400, diagonalSpeed: 283, halfSize: 350 } as const;
 
-/** Durées en ticks (10 ticks = 1 s). Arrivée toutes les 6 à 10 s ; repos 15 s. */
+/**
+ * Durées en ticks (10 ticks = 1 s). Arrivée toutes les 6 à 10 s ; repos 15 s.
+ * restTicks, spawnIntervalMin/Max, firstSpawnTicks : Borne vérifiée au chargement des
+ * sauvegardes : la baisser rend des sauvegardes honnêtes invalides ⇒ nouvelle version de
+ * sauvegarde + migration (voir docs/design/save.md).
+ */
 export const SURVIVOR = {
   speed: 250,
   firstSpawnTicks: 20,
@@ -108,17 +117,54 @@ export const QUEUE = { maxLength: 5 } as const;
 
 export const WELCOME = { ticks: 5 } as const; // 0,5 s sur W
 
+/**
+ * cleanTicks : Borne vérifiée au chargement des sauvegardes : la baisser rend des sauvegardes
+ * honnêtes invalides ⇒ nouvelle version de sauvegarde + migration (voir docs/design/save.md).
+ */
 export const TENT = { cleanTicks: 30 } as const; // 3 s
 
 /** Distances en unités (Chebyshev), vitesse en unités/tick. */
 export const PICKUP = { magnetRadius: 1500, magnetSpeed: 500, collectRadius: 300 } as const;
 
-/** Coûts en bois par emplacement (×~1,6 entre paliers), 1 bois versé par tick. */
+/**
+ * Coûts en bois par emplacement (×~1,6 entre paliers), 1 bois versé par tick.
+ * payIntervalTicks : Borne vérifiée au chargement des sauvegardes : la baisser rend des
+ * sauvegardes honnêtes invalides ⇒ nouvelle version de sauvegarde + migration
+ * (voir docs/design/save.md).
+ */
 export const BUILD = { slotCosts: [15, 25, 40], payIntervalTicks: 1, payPerStep: 1 } as const;
 
 export const RESOURCES = { cap: 9999 } as const;
 
 export const LIMITS = { maxCommandsPerTick: 8 } as const;
+
+/**
+ * Borne anti-triche (docs/design/save.md §5 et §7) : production totale maximale
+ * plausible, par ressource, en unités par tick écoulé, en plus de STARTING_RESOURCES.
+ * Invariant : stock + drops au sol + versé dans les chantiers <= départ + tick x valeur.
+ *
+ * Elle doit rester LARGEMENT au-dessus du rythme maximal honnête, pour ne jamais
+ * rejeter une vraie partie. Estimation actuelle (borne haute) :
+ * - bois  : survivants <= 8 / 60 ticks (intervalle de spawn min) ≈ 0,13 ;
+ *           récolte (un seul joueur) <= 3 / 20 ticks ≈ 0,15 ; total ≈ 0,28 bois/tick.
+ * - nourriture : récolte <= 2 / 15 ticks ≈ 0,13 nourriture/tick.
+ * Un test (tests/core/balance.test.ts) recalcule cette borne depuis NODES, SURVIVOR
+ * et le nombre de tentes : s'il casse parce qu'une feature rend le jeu plus rapide
+ * (travailleurs, nouveaux nœuds, bonus...), il faut RELEVER cette valeur ici.
+ * - pierre, eau, pièces : aucun système ne les produit encore => 0 (une sauvegarde
+ *   honnête ne peut pas en avoir plus que STARTING_RESOURCES). À RELEVER dès qu'une
+ *   feature produira l'une de ces ressources.
+ *
+ * Borne vérifiée au chargement des sauvegardes : la baisser rend des sauvegardes honnêtes
+ * invalides ⇒ nouvelle version de sauvegarde + migration (voir docs/design/save.md).
+ */
+export const PLAUSIBILITY = {
+  woodPerTick: 1,
+  foodPerTick: 1,
+  stonePerTick: 0,
+  waterPerTick: 0,
+  coinsPerTick: 0,
+} as const;
 
 /** Boucle à pas fixe (src/app) : tickMs = 1000 / TIME.ticksPerSecond. */
 export const LOOP = { tickMs: 100, maxFrameDeltaMs: 250, maxTicksPerFrame: 5 } as const;

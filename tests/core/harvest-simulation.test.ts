@@ -15,6 +15,7 @@ import {
   botGoal,
   conservationErrors,
   edit,
+  editPlausible,
   emptyProduced,
   fresh,
   harvestPropertyErrors,
@@ -129,12 +130,14 @@ describe("simulation longue — bot récolteur, plusieurs seeds (≥ 10 min de j
 describe("simulation longue — stocks proches du plafond (drops au sol, ramassage partiel)", () => {
   for (const seed of [7, 2024, 31337]) {
     it(`seed ${seed} : ${TEN_MINUTES} ticks avec bois et nourriture proches du cap`, () => {
-      const start = edit(fresh(seed), (d) => {
+      // Stocks gonflés : `editPlausible` avance le tick de départ (explicitement) pour rester plausible.
+      const start = editPlausible(fresh(seed), (d) => {
         d.resources.wood = RESOURCES.cap - 20;
         d.resources.food = RESOURCES.cap - 3;
       });
+      expect(start.tick).toBeGreaterThan(0);
       const res = simulate(start, TEN_MINUTES, hoarderGoal, false);
-      expect(res.final.tick).toBe(TEN_MINUTES);
+      expect(res.final.tick).toBe(start.tick + TEN_MINUTES);
       expect(res.harvests.tree + res.harvests.bush).toBeGreaterThan(5);
       expect(res.final.resources.food).toBe(RESOURCES.cap);
       // Des drops sont restés au sol (stock plein) : rien n'a été détruit (conservation par tick).
@@ -150,7 +153,7 @@ describe("coexistence d'un drop de bois et d'un drop de nourriture sur une tuile
   // les 8 simulations longues ci-dessus et les 40 000 ticks de marche aléatoire. Scénario dédié, forcé par fixture.
   it("drop de baies au sol (nourriture pleine) + drop de bois aimanté sur la même tuile : 2 drops, puis ramassage", () => {
     const at: TilePos = { tx: 13, ty: 6 }; // voisine du buisson (14,7), à côté de la porte de B2 (12,6)
-    let s = edit(place(fresh(), at), (d) => {
+    let s = editPlausible(place(fresh(), at), (d) => {
       d.resources.wood = RESOURCES.cap;
       d.resources.food = RESOURCES.cap;
     });
@@ -162,7 +165,8 @@ describe("coexistence d'un drop de bois et d'un drop de nourriture sur une tuile
     }
     expect(dropsAt(s, at)).toEqual([expect.objectContaining({ resource: "food", amount: NODES.bush.yield })]);
     // 2. Récompense de survivant posée à la porte de B2 (comme le ferait survivorLifecycle), bois plein.
-    s = edit(s, (d) => {
+    // Bois ajouté hors simulation : editPlausible (la conservation est vérifiée tick par tick ensuite).
+    s = editPlausible(s, (d) => {
       d.drops.push({ id: d.nextId++, pos: tileCenter({ tx: 12, ty: 6 }), resource: "wood", amount: 8 });
     });
     expect(checkInvariants(s)).toEqual([]);
@@ -204,7 +208,7 @@ describe("propriété — tout état atteint : ≤ 1 drop par (tuile, ressource)
     const [woodGap, r1] = nextInt(seedRng(seed ^ 0xa11ce), 0, 10);
     const [foodGap, r2] = nextInt(r1, 0, 10);
     let r: RngState = r2;
-    let s = edit(fresh(seed), (d) => {
+    let s = editPlausible(fresh(seed), (d) => {
       d.resources.wood = RESOURCES.cap - woodGap;
       d.resources.food = RESOURCES.cap - foodGap;
     });

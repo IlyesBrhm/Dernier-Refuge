@@ -55,6 +55,8 @@ export interface FxLayer {
   draw(ctx: CanvasRenderingContext2D, view: FxView, player: Readonly<Vec>, nowMs: number): void;
   /** Nombre d'effets actifs (débogage). */
   activeCount(): number;
+  /** Efface tous les effets (l'état a été remplacé : chargement, import, nouvelle partie). */
+  reset(): void;
 }
 
 export function createFxLayer(): FxLayer {
@@ -192,6 +194,10 @@ export function createFxLayer(): FxLayer {
       let c = 0;
       for (const fx of pool) if (fx.active) c++;
       return c;
+    },
+
+    reset(): void {
+      for (const fx of pool) fx.active = false;
     },
   };
 }

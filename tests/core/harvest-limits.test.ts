@@ -12,6 +12,7 @@ import type { GameState, ResourceNode, TilePos } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
 import {
   edit,
+  editPlausible,
   fresh,
   harvestPropertyErrors,
   justDepleted,
@@ -44,21 +45,27 @@ function nodeAt(s: GameState, tile: TilePos): ResourceNode {
 interface Trace {
   s: GameState;
   depletions: { tick: number; id: number }[];
+  /** Violations d'invariants attendues (fixture hors de l'espace des états atteignables), ignorées. */
+  tolerate?: RegExp | undefined;
 }
 
-function trace(s: GameState): Trace {
-  return { s, depletions: [] };
+function trace(s: GameState, tolerate?: RegExp): Trace {
+  return { s, depletions: [], tolerate };
 }
 
-function check(prev: GameState, next: GameState): void {
-  const errors = [...checkInvariants(next), ...ledgerDeltaErrors(prev, next), ...harvestPropertyErrors(next)];
+function invariantErrors(s: GameState, tolerate?: RegExp): string[] {
+  return checkInvariants(s).filter((e) => !tolerate?.test(e));
+}
+
+function check(prev: GameState, next: GameState, tolerate?: RegExp): void {
+  const errors = [...invariantErrors(next, tolerate), ...ledgerDeltaErrors(prev, next), ...harvestPropertyErrors(next)];
   if (errors.length > 0) throw new Error(`tick ${next.tick}: ${errors.join("; ")}`);
 }
 
 function step(t: Trace, n = 1, each?: (prev: GameState, next: GameState) => void): void {
   for (let i = 0; i < n; i++) {
     const next = tick(t.s);
-    check(t.s, next);
+    check(t.s, next, t.tolerate);
     for (const d of justDepleted(t.s, next)) t.depletions.push({ tick: next.tick, id: d.id });
     each?.(t.s, next);
     t.s = next;
@@ -138,7 +145,7 @@ describe("limites — le joueur s'éloigne en pleine récolte", () => {
 
 describe("limites — stocks de bois ET de nourriture pleins simultanément", () => {
   it("tout reste au sol, rien n'est détruit ; ramassage dès que de la place se libère", () => {
-    const full = edit(place(fresh(), { tx: 13, ty: 2 }), (d) => {
+    const full = editPlausible(place(fresh(), { tx: 13, ty: 2 }), (d) => {
       d.resources.wood = RESOURCES.cap;
       d.resources.food = RESOURCES.cap;
     });
@@ -202,7 +209,7 @@ describe("limites — fusion à l'aimantation entre drops de même ressource", (
   for (const resource of ["wood", "food"] as const) {
     for (const order of ["A puis B", "B puis A"] as const) {
       it(`${resource}, ordre ${order} : un seul drop de 7 sur (5,3), puis tout est ramassé`, () => {
-        const s0 = edit(place(fresh(), { tx: 4, ty: 3 }), (d) => {
+        const s0 = editPlausible(place(fresh(), { tx: 4, ty: 3 }), (d) => {
           d.resources[resource] = 0;
           const a = { id: d.nextId++, pos: tileCenter({ tx: 5, ty: 3 }), resource, amount: 3 };
           const b = { id: d.nextId++, pos: { x: 6000, y: 3500 }, resource, amount: 4 };
@@ -353,8 +360,11 @@ describe("limites — récolte simultanée avec une autre action", () => {
       d.buildSlots[0]!.tile = { ...here };
       d.resources.wood = 5;
     });
-    expect(checkInvariants(s0)).toEqual([]);
-    const t = trace(s0);
+    // Tente et emplacement déplacés : seuls les invariants « conforme à la carte » le signalent.
+    const moved = /^slot \d+: tuile |^tente \d+: tuile /;
+    expect(checkInvariants(s0).length).toBeGreaterThan(0);
+    expect(invariantErrors(s0, moved)).toEqual([]);
+    const t = trace(s0, moved);
     step(t, 1);
     expect(t.s.tents[0]!.cleanProgress).toBe(1);
     expect(t.s.buildSlots[0]!.paid).toBe(1);
