@@ -1,0 +1,96 @@
+{
+  "$comment": "Politique d'accès lue par guard.mjs. 'main' = la session principale. Chaque autre clé = nom d'un subagent (.claude/agents/<nom>.md). Les chemins sont relatifs à la racine du projet, en glob (** et *). Ce fichier est protégé : seul un humain peut le modifier.",
+
+  "protected": [
+    ".claude/hooks/**",
+    ".claude/settings.json",
+    ".claude/settings.local.json",
+    ".claude/agents/**",
+    ".env",
+    ".env.*",
+    ".git/**",
+    "node_modules/**",
+    "package-lock.json"
+  ],
+
+  "unreadable": [".env", ".env.*", "**/*.pem", "**/*.key"],
+
+  "bashDenyAll": [
+    "\\brm\\s+-[a-z]*r",
+    "\\brmdir\\b",
+    "Remove-Item",
+    "\\bdel\\s",
+    "\\bformat\\b\\s+[a-z]:",
+    "\\bsudo\\b",
+    "\\bchmod\\b",
+    "\\bchown\\b",
+    "git\\s+push",
+    "git\\s+reset\\s+--hard",
+    "git\\s+clean",
+    "git\\s+checkout\\s+--\\s",
+    "git\\s+rebase",
+    "git\\s+commit\\s+.*--no-verify",
+    "git\\s+config",
+    "\\bnpm\\s+publish",
+    "\\bcurl\\b",
+    "\\bwget\\b",
+    "Invoke-WebRequest",
+    "Invoke-RestMethod",
+    "\\bssh\\b",
+    "\\bscp\\b",
+    "\\beval\\b",
+    "--dangerously",
+    "\\.claude[/\\\\](hooks|settings|agents)",
+    "\\.env\\b"
+  ],
+
+  "$comment_bashDenySubagents": "Interdit aux subagents en plus de bashDenyAll. --fix : eslint réécrirait des fichiers hors de leur périmètre d'écriture.",
+  "bashDenySubagents": ["--fix\\b"],
+
+  "agents": {
+    "main": {
+      "write": ["**"],
+      "bash": "any-not-denied"
+    },
+
+    "architect": {
+      "write": ["docs/**"],
+      "bash": []
+    },
+
+    "core-dev": {
+      "write": ["src/core/**", "tests/core/**"],
+      "bash": ["^npm (run )?test\\b", "^npx vitest\\b", "^npm run (typecheck|lint)\\b", "^npx tsc --noEmit\\b", "^npx eslint\\b"]
+    },
+
+    "render-dev": {
+      "write": ["src/render/**", "src/ui/**", "src/app/**", "src/main.ts", "src/styles/**", "index.html", "public/**"],
+      "bash": ["^npm run (build|typecheck|lint)\\b", "^npx tsc --noEmit\\b", "^npx eslint\\b"]
+    },
+
+    "save-guardian": {
+      "write": ["src/save/**", "tests/save/**"],
+      "bash": ["^npm (run )?test\\b", "^npx vitest\\b", "^npm run (typecheck|lint)\\b", "^npx eslint\\b"]
+    },
+
+    "test-writer": {
+      "write": ["tests/**"],
+      "bash": ["^npm (run )?test\\b", "^npx vitest\\b", "^npm run (coverage|typecheck|lint)\\b", "^npx eslint\\b"]
+    },
+
+    "balance-designer": {
+      "write": ["src/data/**"],
+      "bash": ["^npm (run )?test\\b", "^npx vitest\\b", "^npm run (sim|typecheck|lint)\\b", "^npx tsc --noEmit\\b", "^npx eslint\\b"]
+    },
+
+    "reviewer": {
+      "write": [],
+      "bash": ["^git (status|diff|log|show)\\b", "^npm (run )?test\\b", "^npx vitest\\b", "^npm run (typecheck|lint)\\b"]
+    }
+  },
+
+  "unknownAgent": {
+    "write": [],
+    "bash": []
+  }
+}
