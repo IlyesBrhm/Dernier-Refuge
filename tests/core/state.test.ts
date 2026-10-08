@@ -1,7 +1,7 @@
-import { BUILD, MAP_LAYOUT, QUEUE, STARTING_RESOURCES, SURVIVOR, WORLD } from "../../src/data/balance";
-import { doorOf, isWalkable, manhattan, parseMap, tileCenter } from "../../src/core/map";
+import { BUILD, HARVEST, MAP_LAYOUT, QUEUE, STARTING_RESOURCES, SURVIVOR, WORLD } from "../../src/data/balance";
+import { doorOf, isWalkable, manhattan, parseMap, tileAt, tileCenter } from "../../src/core/map";
 import { findPath } from "../../src/core/path";
-import { createInitialState } from "../../src/core/state";
+import { cloneState, createInitialState, type TilePos } from "../../src/core/state";
 import { expectValid, fresh } from "./helpers";
 
 describe("état initial", () => {
@@ -18,6 +18,29 @@ describe("état initial", () => {
     expect(s.survivors).toEqual([]);
     expect(s.drops).toEqual([]);
     expectValid(s);
+  });
+
+  it("contient les 5 nœuds de la carte, prêts, ids attribués après tente et emplacements", () => {
+    const s = fresh();
+    expect(s.nodes).toEqual([
+      { id: 5, kind: "tree", tile: { tx: 14, ty: 1 }, status: "ready", progress: 0, regrowTicksLeft: 0 },
+      { id: 6, kind: "bush", tile: { tx: 14, ty: 7 }, status: "ready", progress: 0, regrowTicksLeft: 0 },
+      { id: 7, kind: "tree", tile: { tx: 2, ty: 9 }, status: "ready", progress: 0, regrowTicksLeft: 0 },
+      { id: 8, kind: "tree", tile: { tx: 4, ty: 9 }, status: "ready", progress: 0, regrowTicksLeft: 0 },
+      { id: 9, kind: "bush", tile: { tx: 14, ty: 9 }, status: "ready", progress: 0, regrowTicksLeft: 0 },
+    ]);
+    expect(s.tents.map((t) => t.id)).toEqual([1]);
+    expect(s.buildSlots.map((b) => b.id)).toEqual([2, 3, 4]);
+    expect(s.nextId).toBe(10);
+  });
+
+  it("cloneState copie les nœuds en profondeur", () => {
+    const s = fresh();
+    const c = cloneState(s);
+    c.nodes[0]!.progress = 3;
+    c.nodes[0]!.tile.tx = 0;
+    expect(s.nodes[0]!.progress).toBe(0);
+    expect(s.nodes[0]!.tile.tx).toBe(14);
   });
 
   it("place le joueur au centre de P", () => {
@@ -88,6 +111,69 @@ describe("carte", () => {
   it("autorise le joueur au départ (pas d'obstacle sous P)", () => {
     expect(WORLD.unitsPerTile).toBeGreaterThan(0);
     expectValid(fresh());
+  });
+
+  it("parse A ⇒ nœud tree, M ⇒ nœud bush, tuile \"node\" non praticable, ordre de lecture", () => {
+    const p = parseMap(["#######", "#PAWM.#", "#QE####"]);
+    expect(p.nodes).toEqual([
+      { kind: "tree", tile: { tx: 2, ty: 1 } },
+      { kind: "bush", tile: { tx: 4, ty: 1 } },
+    ]);
+    expect(tileAt(p.map, 2, 1)).toBe("node");
+    expect(tileAt(p.map, 4, 1)).toBe("node");
+    expect(isWalkable(p.map, { tx: 2, ty: 1 })).toBe(false);
+    expect(isWalkable(p.map, { tx: 4, ty: 1 })).toBe(false);
+    expect(findPath(p.map, { tx: 1, ty: 1 }, { tx: 2, ty: 1 })).toBeNull();
+  });
+
+  it("chaque nœud a une voisine 4-connexe praticable, atteignable depuis E (et retour)", () => {
+    for (const n of parsed.nodes) {
+      const { tx, ty } = n.tile;
+      const spots = [
+        { tx, ty: ty - 1 },
+        { tx: tx + 1, ty },
+        { tx, ty: ty + 1 },
+        { tx: tx - 1, ty },
+      ].filter((t) => isWalkable(map, t) && findPath(map, map.entrance, t) !== null);
+      expect(spots.length, `nœud (${tx},${ty})`).toBeGreaterThan(0);
+    }
+  });
+
+  it("aucun nœud n'est à portée de T, B, des portes, de W, P, Q ou E", () => {
+    const actionTiles = [
+      ...parsed.tentTiles,
+      ...parsed.slotTiles,
+      ...parsed.tentTiles.map(doorOf),
+      ...parsed.slotTiles.map(doorOf),
+      ...map.queueTiles,
+      map.welcome,
+      map.entrance,
+      parsed.playerStart,
+    ];
+    for (const n of parsed.nodes) {
+      for (const t of actionTiles) {
+        const d = Math.max(Math.abs(n.tile.tx - t.tx), Math.abs(n.tile.ty - t.ty));
+        expect(d, `nœud (${n.tile.tx},${n.tile.ty}) ↔ (${t.tx},${t.ty})`).toBeGreaterThan(HARVEST.rangeTiles);
+      }
+    }
+  });
+
+  it("chemins des survivants valides avec les nœuds : E → file → W, file → tentes/emplacements, tentes → E, sans traverser de nœud", () => {
+    const isNode = (t: TilePos) => parsed.nodes.some((n) => n.tile.tx === t.tx && n.tile.ty === t.ty);
+    const routes: [TilePos, TilePos][] = [
+      [map.entrance, map.queueTiles[map.queueTiles.length - 1]!],
+      ...map.queueTiles.map((q): [TilePos, TilePos] => [map.entrance, q]),
+      [map.queueTiles[0]!, map.welcome],
+      ...[...parsed.tentTiles, ...parsed.slotTiles].map((t): [TilePos, TilePos] => [map.queueTiles[0]!, t]),
+      ...[...parsed.tentTiles, ...parsed.slotTiles].map((t): [TilePos, TilePos] => [t, map.entrance]),
+      ...[...parsed.tentTiles, ...parsed.slotTiles].map((t): [TilePos, TilePos] => [map.entrance, doorOf(t)]),
+      [map.entrance, parsed.playerStart],
+    ];
+    for (const [from, to] of routes) {
+      const p = findPath(map, from, to);
+      expect(p, `(${from.tx},${from.ty}) → (${to.tx},${to.ty})`).not.toBeNull();
+      for (const t of p!) expect(isNode(t)).toBe(false);
+    }
   });
 
   it("rejette un layout malformé", () => {

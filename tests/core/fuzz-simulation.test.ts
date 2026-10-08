@@ -1,27 +1,20 @@
 // Simulation longue avec bot aléatoire seedé (commandes parfois invalides), propriétés
 // sur plusieurs seeds et non-régression « chaque tente construite finit par servir ».
 
-import { QUEUE, RESOURCES, STARTING_RESOURCES, SURVIVOR, TIME } from "../../src/data/balance";
+import { QUEUE, RESOURCES, SURVIVOR, TIME, type NodeKind } from "../../src/data/balance";
 import { applyCommand, type Command } from "../../src/core/commands";
+import { isNodeInRange } from "../../src/core/harvest-rules";
 import { checkInvariants } from "../../src/core/invariants";
-import { tileOf } from "../../src/core/map";
+import { isWalkable } from "../../src/core/map";
 import { nextInt, seedRng, type RngState } from "../../src/core/rng";
-import { createInitialState, type GameState, type TilePos } from "../../src/core/state";
+import { createInitialState, type GameState } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
-import { deepFreeze, steer } from "./helpers";
+import { accumulate, botGoal, conservationErrors, deepFreeze, emptyProduced, justDepleted, steer } from "./helpers";
 
 const TEN_MINUTES = 10 * 60 * TIME.ticksPerSecond; // 6000 ticks
 
-/** Objectif « utile » : tente en désordre > drop > emplacement payable > accueil. */
-function usefulGoal(s: GameState): TilePos {
-  const messy = s.tents.find((t) => t.status === "messy");
-  if (messy) return messy.tile;
-  const drop = s.drops[0];
-  if (drop) return tileOf(drop.pos);
-  const slot = s.buildSlots.find((b) => b.builtTentId === null);
-  if (slot && s.resources.wood > 0) return slot.tile;
-  return s.map.welcome;
-}
+/** Objectif « utile » (récolte comprise) : voir botGoal dans helpers.ts. */
+const usefulGoal = botGoal;
 
 /** Commandes hostiles / malformées : toutes doivent être refusées. */
 const JUNK: unknown[] = [
@@ -74,16 +67,18 @@ interface FuzzResult {
   accepted: number;
   rejected: number;
   welcomed: number;
+  harvests: Record<NodeKind, number>;
 }
 
 /** Vérifie TOUTES les propriétés demandées à chaque tick. */
 function fuzz(seed: number, ticks: number): FuzzResult {
   let s = createInitialState(seed);
   let r = seedRng(seed ^ 0x5eed);
-  let rewards = 0;
+  let produced = emptyProduced();
   let accepted = 0;
   let rejected = 0;
   let welcomed = 0;
+  const harvests: Record<NodeKind, number> = { tree: 0, bush: 0 };
   const builtOnce = new Map<number, number>(); // slotId -> builtTentId
   const prevPaid = new Map<number, number>(s.buildSlots.map((b) => [b.id, b.paid]));
 
@@ -115,9 +110,16 @@ function fuzz(seed: number, ticks: number): FuzzResult {
 
     for (const v of next.survivors) {
       const prev = input.survivors.find((x) => x.id === v.id);
-      if (prev?.status === "resting" && v.status === "leaving") rewards += SURVIVOR.woodReward;
       if (prev && (prev.status === "queued" || prev.status === "toQueue") && v.status === "walkingToTent") welcomed++;
     }
+    for (const n of justDepleted(input, next)) {
+      harvests[n.kind] += 1;
+      if (!isNodeInRange(next, n)) fail(`nœud ${n.id} épuisé hors de portée`);
+    }
+    if (next.resources.food < input.resources.food) fail("la nourriture a diminué");
+    // Les nœuds restent des obstacles (prêts ou épuisés).
+    for (const n of next.nodes) if (isWalkable(next.map, n.tile)) fail(`nœud ${n.id} praticable`);
+    produced = accumulate(produced, input, next);
     s = next;
 
     // 1. Invariants du cœur.
@@ -151,17 +153,14 @@ function fuzz(seed: number, ticks: number): FuzzResult {
     }
     if (s.tents.length !== 1 + builtOnce.size) fail(`${s.tents.length} tentes pour ${builtOnce.size} constructions`);
 
-    // 5. Conservation du bois.
-    const dropped = s.drops.reduce((a, d) => a + d.amount, 0);
-    const paid = s.buildSlots.reduce((a, b) => a + b.paid, 0);
-    if (s.resources.wood + dropped + paid !== STARTING_RESOURCES.wood + rewards) {
-      fail(`bois non conservé : ${s.resources.wood} + ${dropped} + ${paid} ≠ ${STARTING_RESOURCES.wood} + ${rewards}`);
-    }
+    // 5. Conservation du bois (récompenses + récoltes d'arbres) et de la nourriture (récoltes de buissons).
+    const lost = conservationErrors(s, produced);
+    if (lost.length > 0) fail(lost.join("; "));
 
     // 6. File ≤ 5.
     if (s.queue.length > QUEUE.maxLength) fail(`file de ${s.queue.length}`);
   }
-  return { final: s, accepted, rejected, welcomed };
+  return { final: s, accepted, rejected, welcomed, harvests };
 }
 
 describe("simulation longue — bot aléatoire seedé (10 min de jeu)", () => {
@@ -173,6 +172,8 @@ describe("simulation longue — bot aléatoire seedé (10 min de jeu)", () => {
       expect(res.accepted).toBeGreaterThan(100);
       expect(res.rejected).toBeGreaterThan(100);
       expect(res.welcomed).toBeGreaterThan(0);
+      expect(res.harvests.tree).toBeGreaterThan(0);
+      expect(res.harvests.bush).toBeGreaterThan(0);
       expect(res.final.buildSlots.reduce((a, b) => a + b.paid, 0)).toBeGreaterThan(0);
     }, 60_000);
   }

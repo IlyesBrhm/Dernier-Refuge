@@ -11,7 +11,8 @@ function scene(player: Vec, at: Vec, amount: number, wood = 0): GameState {
   });
 }
 
-const total = (s: GameState) => s.resources.wood + s.drops.reduce((a, d) => a + d.amount, 0);
+const total = (s: GameState) =>
+  s.resources.wood + s.drops.filter((d) => d.resource === "wood").reduce((a, d) => a + d.amount, 0);
 
 describe("ramassage", () => {
   // Ligne 3 : entièrement en herbe.
@@ -84,5 +85,62 @@ describe("ramassage", () => {
       expect(total(s)).toBe(total(s0));
     }
     expect(s.resources.wood).toBe(9);
+  });
+});
+
+describe("ramassage par ressource", () => {
+  const player = { x: 3000, y: 3500 };
+
+  it("un drop de nourriture est crédité dans food (pas dans wood)", () => {
+    const s0 = edit(fresh(), (d) => {
+      d.player.pos = { ...player };
+      d.drops.push({ id: d.nextId++, pos: { ...player }, resource: "food", amount: 4 });
+    });
+    const s = run(s0, 1);
+    expect(s.resources.food).toBe(s0.resources.food + 4);
+    expect(s.resources.wood).toBe(s0.resources.wood);
+    expect(s.drops).toEqual([]);
+  });
+
+  it("un stock de bois plein n'empêche pas l'aimantation ni la collecte de nourriture", () => {
+    const near = { x: player.x + PICKUP.magnetRadius, y: player.y };
+    const s0 = edit(fresh(), (d) => {
+      d.player.pos = { ...player };
+      d.resources.wood = RESOURCES.cap;
+      d.resources.food = 0;
+      d.drops.push({ id: d.nextId++, pos: { ...near }, resource: "wood", amount: 2 });
+      d.drops.push({ id: d.nextId++, pos: { ...near, y: near.y - 1 }, resource: "food", amount: 3 });
+    });
+    const s = run(s0, 10);
+    expect(s.resources.food).toBe(3);
+    expect(s.resources.wood).toBe(RESOURCES.cap);
+    expect(s.drops).toEqual([expect.objectContaining({ resource: "wood", amount: 2, pos: near })]);
+  });
+
+  it("nourriture pleine : collecte partielle, le reste reste au sol", () => {
+    const s0 = edit(fresh(), (d) => {
+      d.player.pos = { ...player };
+      d.resources.food = RESOURCES.cap - 1;
+      d.drops.push({ id: d.nextId++, pos: { ...player }, resource: "food", amount: 5 });
+    });
+    const s = run(s0, 1);
+    expect(s.resources.food).toBe(RESOURCES.cap);
+    expect(s.drops).toEqual([expect.objectContaining({ resource: "food", amount: 4 })]);
+  });
+
+  it("les drops convergents ne fusionnent qu'entre ressources identiques, sans perte", () => {
+    const s0 = edit(fresh(), (d) => {
+      d.player.pos = { x: 3500, y: 3500 };
+      d.resources.wood = 0;
+      d.resources.food = 0;
+      d.drops.push({ id: d.nextId++, pos: { x: 4500, y: 3500 }, resource: "wood", amount: 2 });
+      d.drops.push({ id: d.nextId++, pos: { x: 4500, y: 4500 }, resource: "food", amount: 3 });
+      d.drops.push({ id: d.nextId++, pos: { x: 3500, y: 4500 }, resource: "wood", amount: 4 });
+    });
+    let s = s0;
+    for (let i = 0; i < 10; i++) s = run(s, 1); // invariant : au plus 1 drop par (tuile, ressource)
+    expect(s.resources.wood).toBe(6);
+    expect(s.resources.food).toBe(3);
+    expect(s.drops).toEqual([]);
   });
 });

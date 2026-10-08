@@ -7,4 +7,5 @@ export * from "./selectors";
 export { checkInvariants } from "./invariants";
 export { stepBudget, type StepBudget } from "./loop-budget";
 export { findPath } from "./path";
+export { findHarvestTarget, isNodeInRange, maxRegrowDelay, nodesInRange, regrowDelay } from "./harvest-rules";
 export { chebyshev, doorOf, isWalkable, sameTile, tileAt, tileCenter, tileOf } from "./map";

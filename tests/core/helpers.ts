@@ -1,11 +1,18 @@
 // Utilitaires de test pour le cœur logique (pas un fichier de test).
 
-import { PLAYER, WORLD } from "../../src/data/balance";
+import { NODES, PLAYER, STARTING_RESOURCES, SURVIVOR, WORLD } from "../../src/data/balance";
 import { applyCommand } from "../../src/core/commands";
 import { checkInvariants } from "../../src/core/invariants";
-import { tileCenter, tileOf, sameTile } from "../../src/core/map";
+import { isWalkable, tileCenter, tileOf, sameTile } from "../../src/core/map";
 import { findPath } from "../../src/core/path";
-import { cloneState, createInitialState, type GameState, type TilePos } from "../../src/core/state";
+import {
+  cloneState,
+  createInitialState,
+  type DropResource,
+  type GameState,
+  type ResourceNode,
+  type TilePos,
+} from "../../src/core/state";
 import { tick } from "../../src/core/tick";
 
 export const SEED = 12345;
@@ -74,6 +81,173 @@ export function deepFreeze<T>(o: T): T {
     for (const v of Object.values(o as Record<string, unknown>)) deepFreeze(v);
   }
   return o;
+}
+
+// ---------------------------------------------------------------------------
+// Conservation par ressource (docs/design/harvest.md §5). Rien n'est stocké dans l'état :
+// le test observe les transitions entre deux états consécutifs (un tick d'écart).
+// ---------------------------------------------------------------------------
+
+/** Quantités produites depuis le début de la partie, par ressource de drop. */
+export type Produced = Record<DropResource, number>;
+
+export function emptyProduced(): Produced {
+  return { wood: 0, food: 0 };
+}
+
+/** Nœuds épuisés pendant le tick prev → next (robuste même si harvestTicks valait 1). */
+export function justDepleted(prev: GameState, next: GameState): ResourceNode[] {
+  return next.nodes.filter((n) => {
+    if (n.status !== "depleted") return false;
+    const p = prev.nodes.find((x) => x.id === n.id);
+    return !p || p.status !== "depleted" || n.regrowTicksLeft !== p.regrowTicksLeft - 1;
+  });
+}
+
+/** Rendements des récoltes terminées pendant le tick prev → next, par ressource. */
+export function harvestYields(prev: GameState, next: GameState): Produced {
+  const out = emptyProduced();
+  for (const n of justDepleted(prev, next)) out[NODES[n.kind].resource] += NODES[n.kind].yield;
+  return out;
+}
+
+/** Bois versé par les survivants partis pendant le tick prev → next. */
+export function survivorRewards(prev: GameState, next: GameState): number {
+  let r = 0;
+  for (const v of next.survivors) {
+    const p = prev.survivors.find((x) => x.id === v.id);
+    if (p?.status === "resting" && v.status === "leaving") r += SURVIVOR.woodReward;
+  }
+  return r;
+}
+
+/** Ajoute au registre tout ce qui a été produit pendant le tick prev → next. */
+export function accumulate(produced: Produced, prev: GameState, next: GameState): Produced {
+  const y = harvestYields(prev, next);
+  return { wood: produced.wood + y.wood + survivorRewards(prev, next), food: produced.food + y.food };
+}
+
+export function dropTotal(s: GameState, resource: DropResource): number {
+  return s.drops.filter((d) => d.resource === resource).reduce((a, d) => a + d.amount, 0);
+}
+
+/** Ce que possède le camp pour une ressource : stock + au sol (+ versé dans les emplacements pour le bois). */
+export function ledger(s: GameState): Produced {
+  return {
+    wood: s.resources.wood + dropTotal(s, "wood") + s.buildSlots.reduce((a, b) => a + b.paid, 0),
+    food: s.resources.food + dropTotal(s, "food"),
+  };
+}
+
+/**
+ * Erreurs de conservation : `ledger = départ + produit` pour bois et nourriture,
+ * autres ressources constantes. Liste vide = conservé.
+ */
+export function conservationErrors(s: GameState, produced: Produced): string[] {
+  const errors: string[] = [];
+  const l = ledger(s);
+  for (const r of ["wood", "food"] as const) {
+    const expected = STARTING_RESOURCES[r] + produced[r];
+    if (l[r] !== expected) errors.push(`${r} non conservé : ${l[r]} ≠ ${STARTING_RESOURCES[r]} + ${produced[r]}`);
+  }
+  for (const r of ["stone", "water", "coins"] as const) {
+    if (s.resources[r] !== STARTING_RESOURCES[r]) errors.push(`${r} a changé : ${s.resources[r]}`);
+  }
+  return errors;
+}
+
+/**
+ * Conservation « locale » sur un seul tick : la variation du registre entre prev et next est exactement
+ * ce qui a été produit pendant ce tick (récoltes + récompenses), autres ressources inchangées.
+ * Contrairement à `conservationErrors`, reste valable si une fixture a modifié les stocks avant le tick.
+ */
+export function ledgerDeltaErrors(prev: GameState, next: GameState): string[] {
+  const errors: string[] = [];
+  const a = ledger(prev);
+  const b = ledger(next);
+  const y = harvestYields(prev, next);
+  const expectedWood = y.wood + survivorRewards(prev, next);
+  if (b.wood - a.wood !== expectedWood) errors.push(`bois : Δ${b.wood - a.wood} ≠ produit ${expectedWood}`);
+  if (b.food - a.food !== y.food) errors.push(`nourriture : Δ${b.food - a.food} ≠ produit ${y.food}`);
+  for (const r of ["stone", "water", "coins"] as const) {
+    if (next.resources[r] !== prev.resources[r]) errors.push(`${r} a changé : ${prev.resources[r]} → ${next.resources[r]}`);
+  }
+  return errors;
+}
+
+/**
+ * Propriétés de la récolte vérifiées indépendamment de `checkInvariants` :
+ * au plus un drop par (tuile, ressource), aucun nœud praticable (tuile "node", obstacle),
+ * ni le joueur ni un survivant sur la tuile d'un nœud.
+ */
+export function harvestPropertyErrors(s: GameState): string[] {
+  const errors: string[] = [];
+  const keys = new Set<string>();
+  for (const d of s.drops) {
+    const t = tileOf(d.pos);
+    const key = `${t.tx},${t.ty},${d.resource}`;
+    if (keys.has(key)) errors.push(`deux drops ${d.resource} sur (${t.tx},${t.ty})`);
+    keys.add(key);
+  }
+  const player = tileOf(s.player.pos);
+  for (const n of s.nodes) {
+    if (isWalkable(s.map, n.tile)) errors.push(`nœud ${n.id} praticable`);
+    if (s.map.tiles[n.tile.ty * s.map.width + n.tile.tx] !== "node") errors.push(`nœud ${n.id} : tuile non "node"`);
+    if (sameTile(player, n.tile)) errors.push(`joueur sur le nœud ${n.id}`);
+    for (const v of s.survivors) if (sameTile(tileOf(v.pos), n.tile)) errors.push(`survivant ${v.id} sur le nœud ${n.id}`);
+  }
+  return errors;
+}
+
+/** Première voisine 4-connexe praticable d'un nœud (ordre N, E, S, O). */
+export function harvestSpot(s: GameState, node: ResourceNode): TilePos | null {
+  const { tx, ty } = node.tile;
+  for (const t of [
+    { tx, ty: ty - 1 },
+    { tx: tx + 1, ty },
+    { tx, ty: ty + 1 },
+    { tx: tx - 1, ty },
+  ]) {
+    if (isWalkable(s.map, t)) return t;
+  }
+  return null;
+}
+
+/**
+ * Objectif d'un bot « utile » : tente en désordre > drop > emplacement payable >
+ * (tête de file arrivée et tente libre ⇒ W) > nœud prêt (sa première voisine praticable) > W.
+ */
+export function botGoal(s: GameState): TilePos {
+  const messy = s.tents.find((t) => t.status === "messy");
+  if (messy) return messy.tile;
+  const drop = s.drops[0];
+  if (drop) return tileOf(drop.pos);
+  const slot = s.buildSlots.find((b) => b.builtTentId === null);
+  if (slot && s.resources.wood > 0) return slot.tile;
+  const head = s.survivors.find((v) => v.id === s.queue[0]);
+  if (head?.status === "queued" && s.tents.some((t) => t.status === "free")) return s.map.welcome;
+  for (const n of s.nodes) {
+    if (n.status !== "ready") continue;
+    const spot = harvestSpot(s, n);
+    if (spot) return spot;
+  }
+  return s.map.welcome;
+}
+
+/**
+ * Marche jusqu'à `target` par commandes uniquement (setMoveInput + tick), invariants vérifiés,
+ * puis s'arrête (input 0,0). Échoue après `max` ticks.
+ */
+export function walkTo(state: GameState, target: TilePos, max = 500): GameState {
+  let s = state;
+  for (let i = 0; i < max; i++) {
+    const want = steer(s, target);
+    if (want.dx !== s.player.input.dx || want.dy !== s.player.input.dy) s = move(s, want.dx, want.dy);
+    if (sameTile(tileOf(s.player.pos), target)) return s.player.input.dx === 0 && s.player.input.dy === 0 ? s : move(s, 0, 0);
+    s = tick(s);
+    expectValid(s);
+  }
+  throw new Error(`(${target.tx},${target.ty}) non atteinte en ${max} ticks`);
 }
 
 /**

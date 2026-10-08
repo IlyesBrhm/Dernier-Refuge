@@ -1,11 +1,29 @@
 // Invariants anti-triche / cohérence (docs/design/core-loop.md §5). Liste vide = état valide.
 
-import { MAP_LAYOUT, PLAYER, QUEUE, RESOURCES, TENT, WELCOME, WORLD } from "../data/balance";
+import {
+  MAP_LAYOUT,
+  NODES,
+  PLAYER,
+  QUEUE,
+  RESOURCES,
+  STARTING_RESOURCES,
+  TENT,
+  WELCOME,
+  WORLD,
+  type NodeKind,
+} from "../data/balance";
 import { hitboxBlocked } from "./collision";
-import { parseMap, sameTile, tileOf } from "./map";
+import { maxRegrowDelay } from "./harvest-rules";
+import { parseMap, sameTile, tileAt, tileOf } from "./map";
 import type { GameState, Survivor } from "./state";
 
-const INITIAL_TENT_COUNT = parseMap(MAP_LAYOUT).tentTiles.length;
+const PARSED_LAYOUT = parseMap(MAP_LAYOUT);
+/** Carte de référence, calculée une seule fois au chargement du module. */
+const REF_MAP = PARSED_LAYOUT.map;
+const INITIAL_TENT_COUNT = PARSED_LAYOUT.tentTiles.length;
+const EXPECTED_NODES = PARSED_LAYOUT.nodes;
+/** Ressources possibles d'un drop = ressources produites par les nœuds + récompense des survivants (bois). */
+const DROP_RESOURCES = new Set<string>(["wood", ...Object.values(NODES).map((n) => n.resource)]);
 
 function isInt(v: unknown): v is number {
   return typeof v === "number" && Number.isSafeInteger(v);
@@ -30,6 +48,9 @@ export function checkInvariants(state: GameState): string[] {
   for (const [k, v] of Object.entries(state.resources)) {
     if (!isInt(v) || v < 0 || v > RESOURCES.cap) err(`ressource ${k} invalide: ${v}`);
   }
+  for (const k of Object.keys(STARTING_RESOURCES)) {
+    if (!(k in state.resources)) err(`ressource ${k} manquante`);
+  }
 
   // Ids uniques et < nextId.
   const ids = [
@@ -37,6 +58,7 @@ export function checkInvariants(state: GameState): string[] {
     ...state.tents.map((t) => t.id),
     ...state.drops.map((d) => d.id),
     ...state.buildSlots.map((b) => b.id),
+    ...state.nodes.map((n) => n.id),
   ];
   const seen = new Set<number>();
   for (const id of ids) {
@@ -45,16 +67,74 @@ export function checkInvariants(state: GameState): string[] {
     seen.add(id);
   }
 
-  // Drops.
-  const dropTiles = new Set<string>();
+  // Carte : statique, identique à la carte de référence (dimensions + contenu).
+  if (state.map.width !== REF_MAP.width || state.map.height !== REF_MAP.height) {
+    err(`carte ${state.map.width}x${state.map.height} ≠ référence ${REF_MAP.width}x${REF_MAP.height}`);
+  }
+  if (state.map.tiles.length !== REF_MAP.tiles.length) {
+    err(`carte: ${state.map.tiles.length} tuiles au lieu de ${REF_MAP.tiles.length}`);
+  } else {
+    for (let i = 0; i < REF_MAP.tiles.length; i++) {
+      if (state.map.tiles[i] !== REF_MAP.tiles[i]) {
+        err(`carte: tuile ${i % REF_MAP.width},${Math.floor(i / REF_MAP.width)} = ${String(state.map.tiles[i])} au lieu de ${String(REF_MAP.tiles[i])}`);
+      }
+    }
+  }
+
+  // Drops : dans la carte, au plus un par (tuile, ressource).
+  // Pas d'exigence « tuile praticable » : l'aimantation (systems/pickup.ts) déplace le drop en ligne droite
+  // vers le joueur sans collision ; il peut donc traverser — et rester sur, si le stock se remplit ou si
+  // le joueur s'éloigne — une tuile nœud/arbre/rocher (cf. tests/core/invariants-detect.test.ts).
+  // Ce qui est garanti : il reste entre sa position et celle du joueur, donc dans la carte.
+  const mapW = REF_MAP.width * WORLD.unitsPerTile;
+  const mapH = REF_MAP.height * WORLD.unitsPerTile;
+  const dropKeys = new Set<string>();
   for (const d of state.drops) {
     // Pas de plafond sur un tas au sol (RESOURCES.cap ne s'applique qu'au stock).
     if (!isInt(d.amount) || d.amount < 1) err(`drop ${d.id} montant invalide: ${d.amount}`);
+    if (!DROP_RESOURCES.has(d.resource)) err(`drop ${d.id} ressource invalide: ${String(d.resource)}`);
+    if (!isInt(d.pos.x) || !isInt(d.pos.y)) err(`drop ${d.id} position non entière`);
+    else if (d.pos.x < 0 || d.pos.y < 0 || d.pos.x >= mapW || d.pos.y >= mapH) {
+      err(`drop ${d.id} hors carte (${d.pos.x},${d.pos.y})`);
+    }
     const t = tileOf(d.pos);
-    const key = `${t.tx},${t.ty}`;
-    if (dropTiles.has(key)) err(`plusieurs drops sur la tuile ${key}`);
-    dropTiles.add(key);
+    const key = `${t.tx},${t.ty},${String(d.resource)}`;
+    if (dropKeys.has(key)) err(`plusieurs drops ${String(d.resource)} sur la tuile ${t.tx},${t.ty}`);
+    dropKeys.add(key);
   }
+
+  // Nœuds : mêmes nœuds que la carte (sorte, tuile, ordre), états cohérents.
+  if (state.nodes.length !== EXPECTED_NODES.length) {
+    err(`nombre de nœuds ${state.nodes.length} ≠ ${EXPECTED_NODES.length}`);
+  }
+  state.nodes.forEach((n, i) => {
+    const exp = EXPECTED_NODES[i];
+    if (i > 0 && !(n.id > (state.nodes[i - 1]?.id ?? 0))) err(`nœuds non triés par id (${n.id})`);
+    if (exp && (n.kind !== exp.kind || !sameTile(n.tile, exp.tile))) {
+      err(`nœud ${n.id}: ${String(n.kind)} en (${n.tile.tx},${n.tile.ty}) au lieu de ${exp.kind} en (${exp.tile.tx},${exp.tile.ty})`);
+    }
+    if (tileAt(state.map, n.tile.tx, n.tile.ty) !== "node") err(`nœud ${n.id}: tuile de carte non "node"`);
+    if (!isInt(n.progress) || !isInt(n.regrowTicksLeft)) {
+      err(`nœud ${n.id}: compteurs non entiers`);
+      return;
+    }
+    const spec = (NODES as Record<string, (typeof NODES)[NodeKind] | undefined>)[n.kind];
+    if (!spec) {
+      err(`nœud ${n.id}: sorte inconnue ${String(n.kind)}`);
+      return;
+    }
+    if (n.status === "ready") {
+      if (n.regrowTicksLeft !== 0) err(`nœud ${n.id}: prêt avec regrowTicksLeft ${n.regrowTicksLeft}`);
+      if (n.progress < 0 || n.progress >= spec.harvestTicks) err(`nœud ${n.id}: progress hors bornes (${n.progress})`);
+    } else if (n.status === "depleted") {
+      if (n.progress !== 0) err(`nœud ${n.id}: épuisé avec progress ${n.progress}`);
+      if (n.regrowTicksLeft < 1 || n.regrowTicksLeft > maxRegrowDelay(n.kind)) {
+        err(`nœud ${n.id}: regrowTicksLeft hors bornes (${n.regrowTicksLeft})`);
+      }
+    } else {
+      err(`nœud ${n.id}: statut inconnu ${String(n.status)}`);
+    }
+  });
 
   // File.
   const byId = new Map<number, Survivor>(state.survivors.map((s) => [s.id, s]));

@@ -31,6 +31,7 @@ export function createHud(root: HTMLElement, touchHint: boolean): Hud {
   bar.className = "hud-bar";
   root.appendChild(bar);
   const wood = stat(bar, "Bois");
+  const food = stat(bar, "Nourriture");
   const queue = stat(bar, "File");
   const tents = stat(bar, "Tentes libres");
 
@@ -44,6 +45,7 @@ export function createHud(root: HTMLElement, touchHint: boolean): Hud {
   return {
     update(state): void {
       setText(wood, `${state.resources.wood} / ${RESOURCES.cap}`);
+      setText(food, `${state.resources.food} / ${RESOURCES.cap}`);
       setText(queue, `${queueLength(state)}/${QUEUE.maxLength}`);
       setText(tents, `${freeTentCount(state)} / ${state.tents.length}`);
     },

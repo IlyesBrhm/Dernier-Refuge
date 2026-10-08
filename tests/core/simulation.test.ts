@@ -1,35 +1,42 @@
-import { STARTING_RESOURCES, SURVIVOR } from "../../src/data/balance";
+import type { NodeKind } from "../../src/data/balance";
 import { applyCommand, type Command } from "../../src/core/commands";
+import { isNodeInRange } from "../../src/core/harvest-rules";
 import { checkInvariants } from "../../src/core/invariants";
-import { tileOf } from "../../src/core/map";
 import { nextInt, seedRng } from "../../src/core/rng";
-import type { GameState, TilePos } from "../../src/core/state";
+import type { GameState } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
-import { deepFreeze, fresh, steer } from "./helpers";
-
-/** Objectif du bot : tente en désordre > drops > emplacement payable > accueil. */
-function goal(s: GameState): TilePos {
-  const messy = s.tents.find((t) => t.status === "messy");
-  if (messy) return messy.tile;
-  const drop = s.drops[0];
-  if (drop) return tileOf(drop.pos);
-  const slot = s.buildSlots.find((b) => b.builtTentId === null);
-  if (slot && s.resources.wood > 0) return slot.tile;
-  return s.map.welcome;
-}
+import {
+  accumulate,
+  botGoal,
+  conservationErrors,
+  deepFreeze,
+  emptyProduced,
+  fresh,
+  justDepleted,
+  steer,
+  type Produced,
+} from "./helpers";
 
 interface BotRun {
   final: GameState;
   commands: number;
+  harvests: Record<NodeKind, number>;
+  welcomed: number;
+  produced: Produced;
 }
 
-/** Bot qui ne passe QUE par des commandes ; vérifie invariants, conservation et non-mutation. */
+/**
+ * Bot qui ne passe QUE par des commandes (objectif : botGoal, récolte comprise) ; vérifie à chaque tick
+ * invariants, conservation bois + nourriture, non-mutation, récolte uniquement à portée, nourriture monotone.
+ */
 function runBot(seed: number, ticks: number, freeze = false): BotRun {
   let s = fresh(seed);
-  let rewards = 0;
+  let produced = emptyProduced();
   let commands = 0;
+  let welcomed = 0;
+  const harvests: Record<NodeKind, number> = { tree: 0, bush: 0 };
   for (let i = 0; i < ticks; i++) {
-    const want = steer(s, goal(s));
+    const want = steer(s, botGoal(s));
     if (want.dx !== s.player.input.dx || want.dy !== s.player.input.dy) {
       const r = applyCommand(s, { type: "setMoveInput", ...want });
       expect(r.ok).toBe(true);
@@ -40,25 +47,42 @@ function runBot(seed: number, ticks: number, freeze = false): BotRun {
     const snapshot = freeze ? JSON.stringify(before) : "";
     const next = tick(before);
     if (freeze) expect(JSON.stringify(before)).toBe(snapshot);
-    for (const v of next.survivors) {
-      const prev = s.survivors.find((x) => x.id === v.id);
-      if (prev?.status === "resting" && v.status === "leaving") rewards += SURVIVOR.woodReward;
+    for (const n of justDepleted(s, next)) {
+      harvests[n.kind] += 1;
+      // Toute récolte terminée l'a été avec le joueur à portée (position de fin de tick).
+      if (!isNodeInRange(next, n)) throw new Error(`tick ${next.tick}: nœud ${n.id} épuisé hors de portée`);
     }
+    for (const v of next.survivors) {
+      const p = s.survivors.find((x) => x.id === v.id);
+      if (p && (p.status === "queued" || p.status === "toQueue") && v.status === "walkingToTent") welcomed++;
+    }
+    if (next.resources.food < s.resources.food) throw new Error(`tick ${next.tick}: la nourriture a diminué`);
+    produced = accumulate(produced, s, next);
     s = next;
-    const errors = checkInvariants(s);
+    const errors = [...checkInvariants(s), ...conservationErrors(s, produced)];
     if (errors.length > 0) throw new Error(`tick ${s.tick}: ${errors.join("; ")}`);
-    const dropped = s.drops.reduce((a, d) => a + d.amount, 0);
-    const paid = s.buildSlots.reduce((a, b) => a + b.paid, 0);
-    expect(s.resources.wood + dropped + paid).toBe(STARTING_RESOURCES.wood + rewards);
   }
-  return { final: s, commands };
+  return { final: s, commands, harvests, welcomed, produced };
 }
 
 describe("simulation", () => {
-  it("bot 3000 ticks : invariants OK, ≥ 1 tente construite, bois conservé, entrée jamais mutée", () => {
-    const { final, commands } = runBot(2024, 3000, true);
+  it("bot 3000 ticks : invariants OK, récolte, accueil, construction, bois et nourriture conservés, entrée jamais mutée", () => {
+    const { final, commands, harvests, welcomed, produced } = runBot(2024, 3000, true);
     expect(commands).toBeGreaterThan(0);
+    expect(harvests.tree).toBeGreaterThanOrEqual(1);
+    expect(harvests.bush).toBeGreaterThanOrEqual(1);
+    expect(produced.food).toBeGreaterThan(0);
+    expect(welcomed).toBeGreaterThanOrEqual(1);
     expect(final.buildSlots.filter((b) => b.builtTentId !== null).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("le JSON aller-retour d'un état avec des nœuds en cours (récolte / repousse) est identique et valide", () => {
+    const { final } = runBot(2024, 1500);
+    expect(final.nodes.some((n) => n.status === "depleted" || n.progress > 0)).toBe(true);
+    const back = JSON.parse(JSON.stringify(final)) as GameState;
+    expect(back).toEqual(final);
+    expect(checkInvariants(back)).toEqual([]);
+    expect(tick(back, 300)).toEqual(tick(final, 300));
   });
 
   it("déterminisme : même seed + mêmes commandes ⇒ même état", () => {

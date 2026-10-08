@@ -25,7 +25,7 @@ export function mutateSurvivorLifecycle(draft: GameState): void {
       tent.occupantId = null;
       tent.cleanProgress = 0;
       s.path = findPath(draft.map, tent.tile, draft.map.entrance) ?? [];
-      addDrop(draft, doorOf(tent.tile), SURVIVOR.woodReward);
+      addDrop(draft, doorOf(tent.tile), "wood", SURVIVOR.woodReward);
     } else if (s.status === "walkingToTent" && s.path.length === 0) {
       const tent = draft.tents.find((t) => t.id === s.tentId);
       if (!tent) continue;

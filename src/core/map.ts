@@ -1,13 +1,19 @@
 // Parseur de carte et utilitaires de tuiles (purs).
 
-import { WORLD } from "../data/balance";
+import { WORLD, type NodeKind } from "../data/balance";
 import type { MapState, Tile, TilePos, Vec } from "./state";
+
+export interface ParsedNode {
+  kind: NodeKind;
+  tile: TilePos;
+}
 
 export interface ParsedMap {
   map: MapState;
   tentTiles: TilePos[]; // ordre de lecture
   slotTiles: TilePos[]; // ordre de lecture = index dans BUILD.slotCosts
   playerStart: TilePos;
+  nodes: ParsedNode[]; // nœuds récoltables, ordre de lecture (A = tree, M = bush)
 }
 
 const U = WORLD.unitsPerTile;
@@ -24,6 +30,7 @@ export function parseMap(layout: readonly string[]): ParsedMap {
   const welcome: TilePos[] = [];
   const entrance: TilePos[] = [];
   const start: TilePos[] = [];
+  const nodes: ParsedNode[] = [];
   layout.forEach((row, ty) => {
     if (row.length !== width) throw new Error(`ligne ${ty} de longueur ${row.length} au lieu de ${width}`);
     for (let tx = 0; tx < width; tx++) {
@@ -63,6 +70,14 @@ export function parseMap(layout: readonly string[]): ParsedMap {
           tiles.push("grass");
           start.push(pos);
           break;
+        case "A":
+          tiles.push("node");
+          nodes.push({ kind: "tree", tile: pos });
+          break;
+        case "M":
+          tiles.push("node");
+          nodes.push({ kind: "bush", tile: pos });
+          break;
         default:
           throw new Error(`caractère inconnu '${String(c)}' en (${tx},${ty})`);
       }
@@ -82,6 +97,7 @@ export function parseMap(layout: readonly string[]): ParsedMap {
     tentTiles,
     slotTiles,
     playerStart: p,
+    nodes,
   };
 }
 
@@ -99,10 +115,10 @@ export function tileAt(map: MapState, tx: number, ty: number): Tile | undefined 
   return map.tiles[ty * map.width + tx];
 }
 
-/** Hors carte = obstacle. */
+/** Hors carte = obstacle. Les nœuds récoltables sont des obstacles permanents (prêts ou épuisés). */
 export function isObstacleAt(map: MapState, tx: number, ty: number): boolean {
   const t = tileAt(map, tx, ty);
-  return t === undefined || t === "tree" || t === "rock";
+  return t === undefined || t === "tree" || t === "rock" || t === "node";
 }
 
 export function isWalkable(map: MapState, t: TilePos): boolean {

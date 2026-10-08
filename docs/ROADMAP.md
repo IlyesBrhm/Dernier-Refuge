@@ -8,7 +8,7 @@
 
 ## Jalon 1 — Boucle de base
 - [x] Déplacement du joueur (clavier + joystick tactile)
-- [ ] Nœuds de ressources (arbres, buissons) + récolte + repousse
+- [x] Nœuds de ressources (arbres, buissons) + récolte + repousse
 - [x] Arrivée de survivants, file d'attente, accueil, paiement
 - [x] HUD ressources
 

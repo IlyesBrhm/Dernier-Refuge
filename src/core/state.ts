@@ -1,7 +1,14 @@
 // Forme de l'état de jeu (docs/design/core-loop.md §2) et état initial.
 // Tout est sérialisable JSON : pas de classes, Map, Set ni Date.
 
-import { BUILD, MAP_LAYOUT, STARTING_RESOURCES, SURVIVOR } from "../data/balance";
+import {
+  BUILD,
+  MAP_LAYOUT,
+  STARTING_RESOURCES,
+  SURVIVOR,
+  type DropResource,
+  type NodeKind,
+} from "../data/balance";
 import { parseMap, tileCenter } from "./map";
 import { seedRng, type RngState } from "./rng";
 
@@ -15,7 +22,9 @@ export interface TilePos {
   tx: number;
   ty: number;
 }
-export type Tile = "grass" | "tree" | "rock";
+/** `node` : tuile d'un nœud récoltable, obstacle statique (prêt ou épuisé). */
+export type Tile = "grass" | "tree" | "rock" | "node";
+export type { DropResource, NodeKind };
 export type Axis = -1 | 0 | 1;
 
 export interface MapState {
@@ -54,8 +63,19 @@ export interface Tent {
 export interface Drop {
   id: number;
   pos: Vec;
-  resource: "wood";
+  resource: DropResource;
   amount: number;
+}
+
+export type NodeStatus = "ready" | "depleted";
+/** Nœud récoltable (docs/design/harvest.md §2). */
+export interface ResourceNode {
+  id: number;
+  kind: NodeKind;
+  tile: TilePos; // statique, = position dans MAP_LAYOUT
+  status: NodeStatus;
+  progress: number; // ready : 0..harvestTicks-1 ; depleted : 0
+  regrowTicksLeft: number; // depleted : 1..maxRegrowDelay(kind) ; ready : 0
 }
 
 export interface BuildSlot {
@@ -82,6 +102,7 @@ export interface GameState {
   spawnTimer: number;
   welcomeProgress: number; // 0..WELCOME.ticks
   commandsThisTick: number; // anti-spam, remis à 0 par tick()
+  nodes: ResourceNode[]; // triés par id, ordre de lecture de la carte
 }
 
 export function createInitialState(seed: number): GameState {
@@ -107,6 +128,15 @@ export function createInitialState(seed: number): GameState {
     builtTentId: null,
     payCooldown: 0,
   }));
+  // Ids des nœuds attribués après tentes et emplacements (ordre de lecture).
+  const nodes: ResourceNode[] = parsed.nodes.map((n) => ({
+    id: nextId++,
+    kind: n.kind,
+    tile: { ...n.tile },
+    status: "ready",
+    progress: 0,
+    regrowTicksLeft: 0,
+  }));
   return {
     tick: 0,
     rng: seedRng(seed),
@@ -122,6 +152,7 @@ export function createInitialState(seed: number): GameState {
     spawnTimer: SURVIVOR.firstSpawnTicks,
     welcomeProgress: 0,
     commandsThisTick: 0,
+    nodes,
   };
 }
 
@@ -137,5 +168,6 @@ export function cloneState(s: GameState): GameState {
     tents: s.tents.map((t) => ({ ...t, tile: { ...t.tile } })),
     drops: s.drops.map((d) => ({ ...d, pos: { ...d.pos } })),
     buildSlots: s.buildSlots.map((b) => ({ ...b, tile: { ...b.tile } })),
+    nodes: s.nodes.map((n) => ({ ...n, tile: { ...n.tile } })),
   };
 }

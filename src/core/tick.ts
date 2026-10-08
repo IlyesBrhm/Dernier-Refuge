@@ -4,6 +4,8 @@ import { OFFLINE } from "../data/balance";
 import { cloneState, type GameState } from "./state";
 import { mutateBuild } from "./systems/build";
 import { mutateCleaning } from "./systems/cleaning";
+import { mutateHarvest } from "./systems/harvest";
+import { mutateNodeRegrow } from "./systems/nodeRegrow";
 import { mutateMovePlayer } from "./systems/movePlayer";
 import { mutatePickup } from "./systems/pickup";
 import { mutateSpawn } from "./systems/spawn";
@@ -21,6 +23,8 @@ function stepOnce(draft: GameState): void {
   mutateWelcome(draft);
   mutateCleaning(draft);
   mutateBuild(draft);
+  mutateNodeRegrow(draft); // avant la récolte (docs/design/harvest.md §1.8)
+  mutateHarvest(draft); // avant le ramassage : le butin est ramassé dans le même tick
   mutatePickup(draft);
 }
 

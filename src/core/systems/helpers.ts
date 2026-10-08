@@ -2,7 +2,7 @@
 
 import { sameTile, tileCenter, tileOf } from "../map";
 import { findPath } from "../path";
-import { cloneState, type GameState, type Survivor, type TilePos } from "../state";
+import { cloneState, type DropResource, type GameState, type Survivor, type TilePos } from "../state";
 
 /** Enveloppe pure : clone l'état puis applique la mutation sur le clone. */
 export function pure(mutate: (draft: GameState) => void): (state: GameState) => GameState {
@@ -45,15 +45,16 @@ export function retargetQueue(draft: GameState): void {
 }
 
 /**
- * Pose `amount` bois au centre de `tile`, fusionné avec un drop existant sur la tuile.
- * Pas de plafond : RESOURCES.cap est une règle de stock, pas de tas au sol (conservation du bois).
+ * Pose `amount` unités de `resource` au centre de `tile`, fusionnées avec un drop existant de la
+ * MÊME ressource sur la tuile (au plus un drop par (tuile, ressource)).
+ * Pas de plafond : RESOURCES.cap est une règle de stock, pas de tas au sol (conservation).
  */
-export function addDrop(draft: GameState, tile: TilePos, amount: number): void {
+export function addDrop(draft: GameState, tile: TilePos, resource: DropResource, amount: number): void {
   if (amount <= 0) return;
-  const existing = draft.drops.find((d) => sameTile(tileOf(d.pos), tile));
+  const existing = draft.drops.find((d) => d.resource === resource && sameTile(tileOf(d.pos), tile));
   if (existing) {
     existing.amount += amount;
     return;
   }
-  draft.drops.push({ id: draft.nextId++, pos: tileCenter(tile), resource: "wood", amount });
+  draft.drops.push({ id: draft.nextId++, pos: tileCenter(tile), resource, amount });
 }

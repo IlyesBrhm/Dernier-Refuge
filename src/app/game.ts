@@ -70,6 +70,8 @@ export function startGame({ seed, renderer, hud, input }: GameDeps): Game {
     for (let i = 0; i < budget.steps; i++) {
       prev = curr;
       curr = tick(curr);
+      // Détection d'événements visuels tick par tick (jamais par image) : un effet par récolte.
+      renderer.onTick(prev, curr);
       if (import.meta.env.DEV) checkDev(curr);
     }
     renderer.draw(prev, curr, acc / LOOP.tickMs);
