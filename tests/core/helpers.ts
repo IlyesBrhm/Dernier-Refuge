@@ -1,8 +1,19 @@
 // Utilitaires de test pour le cœur logique (pas un fichier de test).
 
-import { NODES, PLAUSIBILITY, PLAYER, STARTING_RESOURCES, SURVIVOR, WORLD } from "../../src/data/balance";
+import {
+  COLD,
+  FIRE,
+  NODES,
+  PLAUSIBILITY,
+  PLAYER,
+  SLEEP,
+  STARTING_RESOURCES,
+  SURVIVOR,
+  TIME,
+  WORLD,
+} from "../../src/data/balance";
 import { applyCommand } from "../../src/core/commands";
-import { checkInvariants, heldTotal } from "../../src/core/invariants";
+import { checkInvariants, heldTotal, plausibleMax } from "../../src/core/invariants";
 import { isWalkable, tileCenter, tileOf, sameTile } from "../../src/core/map";
 import { findPath } from "../../src/core/path";
 import {
@@ -11,9 +22,12 @@ import {
   type DropResource,
   type GameState,
   type ResourceNode,
+  type SurvivorStatus,
   type TilePos,
 } from "../../src/core/state";
+import { feedZone, isFeedingFire } from "../../src/core/selectors";
 import { tick } from "../../src/core/tick";
+import { CYCLE_TICKS, cyclePos, isNight } from "../../src/core/time";
 
 export const SEED = 12345;
 
@@ -56,12 +70,24 @@ export function editPlausible(state: GameState, fn: (draft: GameState) => void):
   return s;
 }
 
+/**
+ * Comme `editPlausible`, mais si le tick obtenu tombe la nuit, l'avance jusqu'à l'aube suivante
+ * (premier tick de jour) : pour les fixtures qui supposent le jour (survivant `resting`, arrivées).
+ */
+export function editPlausibleDay(state: GameState, fn: (draft: GameState) => void): GameState {
+  const s = editPlausible(state, fn);
+  if (isNight(s.tick)) s.tick = s.tick - cyclePos(s.tick) + CYCLE_TICKS;
+  return s;
+}
+
 /** Plus petit `tick` ≥ `state.tick` pour lequel bois et nourriture détenus sont plausibles. */
 export function plausibleTick(state: GameState): number {
   const perTick: Record<DropResource, number> = { wood: PLAUSIBILITY.woodPerTick, food: PLAUSIBILITY.foodPerTick };
   let t = state.tick;
+  const atZero = { ...state, tick: 0 };
   for (const r of ["wood", "food"] as const) {
-    const excess = heldTotal(state, r) - STARTING_RESOURCES[r];
+    // Plafond au tick 0 = départ (+ réserve initiale du feu pour le bois).
+    const excess = heldTotal(state, r) - plausibleMax(atZero, r);
     if (Number.isSafeInteger(excess) && excess > 0) t = Math.max(t, Math.ceil(excess / perTick[r]));
   }
   return t;
@@ -143,12 +169,31 @@ export function harvestYields(prev: GameState, next: GameState): Produced {
   return out;
 }
 
+/**
+ * Récompense attendue d'un départ observé entre prev et next (survivant installé ⇒ leaving) :
+ * - nuit : départ au froid, floor(R / D) (y compris « arrivé, endormi et parti dans le même pas ») ;
+ * - jour, dormeur : paiement de l'aube, R + dawnBonus ;
+ * - jour, au repos : fin de repos, R.
+ * 0 si ce n'est pas un départ.
+ */
+export function departReward(prevStatus: SurvivorStatus | undefined, next: GameState, nextStatus: SurvivorStatus): number {
+  if (nextStatus !== "leaving") return 0;
+  if (prevStatus !== "resting" && prevStatus !== "sleeping" && prevStatus !== "walkingToTent") return 0;
+  if (isNight(next.tick)) return COLD_REWARD_T;
+  if (prevStatus === "sleeping") return DAWN_REWARD_T;
+  if (prevStatus === "resting") return SURVIVOR.woodReward;
+  return 0;
+}
+
+export const COLD_REWARD_T = Math.floor(SURVIVOR.woodReward / COLD.rewardDivisor);
+export const DAWN_REWARD_T = SURVIVOR.woodReward + SLEEP.dawnBonus;
+
 /** Bois versé par les survivants partis pendant le tick prev → next. */
 export function survivorRewards(prev: GameState, next: GameState): number {
   let r = 0;
   for (const v of next.survivors) {
     const p = prev.survivors.find((x) => x.id === v.id);
-    if (p?.status === "resting" && v.status === "leaving") r += SURVIVOR.woodReward;
+    r += departReward(p?.status, next, v.status);
   }
   return r;
 }
@@ -163,24 +208,38 @@ export function dropTotal(s: GameState, resource: DropResource): number {
   return s.drops.filter((d) => d.resource === resource).reduce((a, d) => a + d.amount, 0);
 }
 
-/** Ce que possède le camp pour une ressource : stock + au sol (+ versé dans les emplacements pour le bois). */
+/**
+ * Ce que possède le camp pour une ressource : stock + au sol (+ pour le bois : versé dans les
+ * emplacements, réserve du feu et bois brûlé cumulé).
+ */
 export function ledger(s: GameState): Produced {
   return {
-    wood: s.resources.wood + dropTotal(s, "wood") + s.buildSlots.reduce((a, b) => a + b.paid, 0),
+    wood:
+      s.resources.wood +
+      dropTotal(s, "wood") +
+      s.buildSlots.reduce((a, b) => a + b.paid, 0) +
+      s.fire.wood +
+      s.fire.burnedTotal,
     food: s.resources.food + dropTotal(s, "food"),
   };
 }
 
+/** Ce que possède le camp au départ : stocks de départ (+ réserve initiale du feu pour le bois). */
+export const LEDGER_START: Produced = {
+  wood: STARTING_RESOURCES.wood + FIRE.initialWood,
+  food: STARTING_RESOURCES.food,
+};
+
 /**
- * Erreurs de conservation : `ledger = départ + produit` pour bois et nourriture,
+ * Erreurs de conservation (stricte) : `ledger = départ + produit` pour bois et nourriture,
  * autres ressources constantes. Liste vide = conservé.
  */
 export function conservationErrors(s: GameState, produced: Produced): string[] {
   const errors: string[] = [];
   const l = ledger(s);
   for (const r of ["wood", "food"] as const) {
-    const expected = STARTING_RESOURCES[r] + produced[r];
-    if (l[r] !== expected) errors.push(`${r} non conservé : ${l[r]} ≠ ${STARTING_RESOURCES[r]} + ${produced[r]}`);
+    const expected = LEDGER_START[r] + produced[r];
+    if (l[r] !== expected) errors.push(`${r} non conservé : ${l[r]} ≠ ${LEDGER_START[r]} + ${produced[r]}`);
   }
   for (const r of ["stone", "water", "coins"] as const) {
     if (s.resources[r] !== STARTING_RESOURCES[r]) errors.push(`${r} a changé : ${s.resources[r]}`);
@@ -264,6 +323,50 @@ export function botGoal(s: GameState): TilePos {
     if (spot) return spot;
   }
   return s.map.welcome;
+}
+
+// ---------------------------------------------------------------------------
+// Feu de camp : bot « attentif » (docs/design/day-night.md §6.2, consigne utilisateur).
+// ---------------------------------------------------------------------------
+
+/** Début du crépuscule visuel (cyclePos ≥ 2100) : le bot attentif remplit le feu à fond. */
+export const DUSK_START = TIME.dayTicks - TIME.duskTicks;
+
+/** Voisine du feu (zone d'alimentation) la plus proche du joueur en BFS. */
+export function feedSpot(s: GameState): TilePos {
+  const here = tileOf(s.player.pos);
+  let best: { t: TilePos; d: number } | null = null;
+  for (const t of feedZone(s.map)) {
+    const d = findPath(s.map, here, t)?.length ?? Number.POSITIVE_INFINITY;
+    if (!best || d < best.d) best = { t, d };
+  }
+  if (!best) throw new Error("aucune voisine praticable du feu");
+  return best.t;
+}
+
+/**
+ * Objectif « feu » du bot attentif, ou null : remplit à fond au crépuscule (cyclePos ≥ 2100) ;
+ * la nuit, ne revient que si wood ≤ FIRE.lowWood (et reste jusqu'au plein une fois sur place).
+ * L'alimentation exige un arrêt de FIRE.feedDelayTicks : arrivé sur la voisine visée, `steer`
+ * renvoie (0,0) et le bot reste immobile ; « sur place » = délai entamé (feedProgress > 0, donc
+ * arrêté dans la zone au dernier tick) ou alimentation en cours.
+ */
+export function attentiveFireGoal(s: GameState): TilePos | null {
+  if (s.resources.wood <= 0 || s.fire.wood >= FIRE.capacity) return null;
+  const p = cyclePos(s.tick);
+  const atFire = s.fire.feedProgress > 0 || isFeedingFire(s);
+  if (p >= DUSK_START && p < TIME.dayTicks) return feedSpot(s);
+  if (isNight(s.tick) && (s.fire.wood <= FIRE.lowWood || atFire)) return feedSpot(s);
+  return null;
+}
+
+/**
+ * Bois à garder en réserve pour le feu (bot attentif) : de 1500 au crépuscule, de quoi le
+ * remplir ; sinon rien.
+ */
+export function fireReserve(s: GameState): number {
+  const p = cyclePos(s.tick);
+  return p >= 1500 && p < TIME.dayTicks ? FIRE.capacity - s.fire.wood : 0;
 }
 
 /**

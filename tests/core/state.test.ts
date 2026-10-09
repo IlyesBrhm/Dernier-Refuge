@@ -114,7 +114,7 @@ describe("carte", () => {
   });
 
   it("parse A ⇒ nœud tree, M ⇒ nœud bush, tuile \"node\" non praticable, ordre de lecture", () => {
-    const p = parseMap(["#######", "#PAWM.#", "#QE####"]);
+    const p = parseMap(["#######", "#PAWM.#", "#QEF###"]);
     expect(p.nodes).toEqual([
       { kind: "tree", tile: { tx: 2, ty: 1 } },
       { kind: "bush", tile: { tx: 4, ty: 1 } },

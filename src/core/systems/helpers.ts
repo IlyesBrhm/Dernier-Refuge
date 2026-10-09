@@ -1,6 +1,6 @@
 // Utilitaires internes aux systèmes. Les fonctions `mutate*` modifient un brouillon déjà cloné.
 
-import { sameTile, tileCenter, tileOf } from "../map";
+import { doorOf, sameTile, tileCenter, tileOf } from "../map";
 import { findPath } from "../path";
 import { cloneState, type DropResource, type GameState, type Survivor, type TilePos } from "../state";
 
@@ -42,6 +42,27 @@ export function retargetQueue(draft: GameState): void {
     s.path = path;
     s.status = path.length === 0 ? "queued" : "toQueue";
   });
+}
+
+/**
+ * Seul chemin de départ d'un survivant installé (fin de repos, aube, froid) :
+ * statut `leaving`, tente libérée en désordre (cleanProgress = 0), chemin BFS vers l'entrée,
+ * récompense `reward` en bois déposée sur la porte de la tente (fusionnée, rien si ≤ 0).
+ */
+export function departSurvivor(draft: GameState, s: Survivor, reward: number): void {
+  const tent = draft.tents.find((t) => t.id === s.tentId);
+  s.restTicksLeft = 0;
+  s.tentId = null;
+  s.status = "leaving";
+  if (!tent) {
+    s.path = [];
+    return;
+  }
+  tent.status = "messy";
+  tent.occupantId = null;
+  tent.cleanProgress = 0;
+  s.path = findPath(draft.map, tent.tile, draft.map.entrance) ?? [];
+  addDrop(draft, doorOf(tent.tile), "wood", reward);
 }
 
 /**

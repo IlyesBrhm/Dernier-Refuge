@@ -1,6 +1,6 @@
 # Dernier Refuge — instructions pour Claude
 
-Jeu de gestion-survie vue de dessus (gameplay sur grille 2D ; rendu Canvas 2D par défaut, rendu 3D three.js en prototype via `?render=3d`) dans le navigateur (inspiré de My Perfect Hotel).
+Jeu de gestion-survie vue de dessus (gameplay sur grille 2D ; rendu 3D three.js par défaut, repli automatique en Canvas 2D, forçable avec `?render=2d`) dans le navigateur (inspiré de My Perfect Hotel).
 Cahier des charges : @docs/SPEC.md — Avancement : @docs/ROADMAP.md
 
 ## Stack
@@ -33,17 +33,19 @@ Utiliser `/feature <description>` pour une fonctionnalité complète. Agents dis
 | Agent | Peut écrire dans |
 |---|---|
 | architect | docs/ |
-| core-dev | src/core, tests/core |
-| balance-designer | src/data |
-| save-guardian | src/save, tests/save |
-| render-dev | src/render, src/ui, src/app, src/main.ts, index.html, public |
+| core-dev | src/core, src/data, tests/, docs/design |
+| balance-designer | src/data, tests/, docs/ |
+| save-guardian | src/save, tests/, docs/design |
+| render-dev | src/render, src/ui, src/app, src/main.ts, index.html, public (hors public/assets), tests/, tools/asset-preview, docs/design |
 | test-writer | tests/ |
 | reviewer | rien (lecture seule) |
+
+Barrière de tests (typecheck + tests) uniquement à la fin de la session principale ; le lint passe par `npm run check` et la revue.
 
 ## Commandes
 `npm run dev` · `npm test` · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run coverage` · `npm run assets` (reconvertit les modèles 3D ; livrés = `tools/shipped-assets.json`) · `npm run assets:size` · `npm run e2e` (Playwright) · `npm run captures` (régénère `captures/`)
 
-Aperçu de tous les modèles 3D (`assets-all/`, local) : `npm run dev` puis `/tools/asset-preview/`. Plan du rendu 3D : `docs/design/render-3d.md`.
+Aperçu de tous les modèles 3D (`assets-all/`, local) : `npm run dev` puis `/tools/asset-preview/`. Plans : `docs/design/render-3d.md` (rendu 3D), `docs/design/day-night.md` (jour/nuit, feu de camp).
 
 ## Harness (ne pas modifier sans l'humain)
 `.claude/settings.json`, `.claude/hooks/`, `.claude/agents/` sont protégés. Les actions refusées sont journalisées dans `.claude/logs/audit.jsonl`.

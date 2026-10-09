@@ -3,6 +3,7 @@
 
 import {
   BUILD,
+  FIRE,
   LIMITS,
   MAP_LAYOUT,
   NODES,
@@ -490,7 +491,10 @@ describe("checkInvariants — invariants de sauvegarde (save.md §5)", () => {
       const over = edit(at, (d) => void (d.resources[r] += 1));
       expect(checkInvariants(over).some((e) => e.startsWith(`plausibilité ${r}`))).toBe(true);
     }
-    expect(plausibleMax(base, "wood")).toBe(STARTING_RESOURCES.wood + base.tick * PLAUSIBILITY.woodPerTick);
+    // Bois : + réserve initiale du feu (docs/design/day-night.md §5).
+    expect(plausibleMax(base, "wood")).toBe(
+      STARTING_RESOURCES.wood + FIRE.initialWood + base.tick * PLAUSIBILITY.woodPerTick,
+    );
     expect(plausibleMax(base, "food")).toBe(STARTING_RESOURCES.food + base.tick * PLAUSIBILITY.foodPerTick);
   });
 
@@ -522,14 +526,16 @@ describe("checkInvariants — invariants de sauvegarde (save.md §5)", () => {
     expect(heldTotal(moved, "wood")).toBe(heldTotal(s, "wood"));
     // Bois versé au-delà du plausible : tick ramené juste sous ce qu'exige le total détenu.
     const tooEarly = edit(moved, (d) => {
-      d.tick = Math.ceil((heldTotal(d, "wood") - STARTING_RESOURCES.wood) / PLAUSIBILITY.woodPerTick) - 1;
+      d.tick =
+        Math.ceil((heldTotal(d, "wood") - STARTING_RESOURCES.wood - FIRE.initialWood) / PLAUSIBILITY.woodPerTick) - 1;
     });
     expect(checkInvariants(tooEarly).some((e) => e.startsWith("plausibilité wood"))).toBe(true);
   });
 
   it("plausibilité : un état initial (tick 0) est plausible", () => {
     expectValid(fresh());
-    expect(heldTotal(fresh(), "wood")).toBe(STARTING_RESOURCES.wood);
+    // Le bois détenu inclut la réserve initiale du feu.
+    expect(heldTotal(fresh(), "wood")).toBe(STARTING_RESOURCES.wood + FIRE.initialWood);
     expect(heldTotal(fresh(), "food")).toBe(STARTING_RESOURCES.food);
   });
 

@@ -5,9 +5,17 @@
 import {
   chebyshev,
   doorOf,
+  feedZone,
+  fireRatio,
   harvestTarget,
+  isFeedingFire,
+  isFireLit,
+  isFireLow,
   isPlayerOn,
+  playerTile,
+  sameTile,
   slotRemaining,
+  welcomeBlockReason,
   type DropResource,
   type GameState,
   type MapState,
@@ -17,8 +25,11 @@ import {
   type Vec,
 } from "../../core";
 import { MAP_LAYOUT, SURVIVOR, TENT, WELCOME } from "../../data/balance";
+import { lightingAt, type Lighting } from "../daylight";
+import type { WelcomeBlock } from "../welcome-block";
 import { interpolate } from "../interpolate";
-import { prevNodeOf, shownHarvestRatio, shownRegrowRatio } from "../ratios";
+import type { FramingInput } from "./framing";
+import { prevNodeOf, shownFeedRatio, shownHarvestRatio, shownRegrowRatio } from "../ratios";
 import {
   DECOR,
   ENTRANCE_PATH_TILES,
@@ -54,7 +65,7 @@ export interface CharacterItem {
   heading: number | null;
   /** La position a changé entre prev et curr (hors téléportation > 1 tuile). */
   moving: boolean;
-  /** false si le survivant est « resting » (il est dans la tente). */
+  /** false si le survivant est « resting » ou « sleeping » (il est dans la tente). */
   visible: boolean;
 }
 
@@ -84,7 +95,29 @@ export interface TentItem {
   clean: number;
   /** 1 - restTicksLeft/restTicks de l'occupant au repos (interpolé), sinon null. */
   rest: number | null;
+  /** Occupée par un dormeur (nuit) : bulle « Zz » au lieu de la barre de repos (`rest` = null). */
+  sleeping: boolean;
   playerOn: boolean;
+}
+
+export interface FireItem {
+  key: "fire";
+  type: "fire";
+  /** Centre de la tuile du feu (m). */
+  x: number;
+  z: number;
+  /** Bois / capacité, interpolé entre prev et curr, dans [0, 1]. */
+  ratio: number;
+  /** = isFireLit(curr). */
+  lit: boolean;
+  /** = isFireLow(curr) (nuit, feu qui faiblit). */
+  low: boolean;
+  /** = isFeedingFire(curr) (le joueur verse du bois). */
+  feeding: boolean;
+  /** Joueur dans la zone d'alimentation (feedZone) : barre du feu affichée. */
+  playerNear: boolean;
+  /** Jauge d'arrêt avant alimentation [0, 1], interpolée ; null = cachée (cf. shownFeedRatio). */
+  feed: number | null;
 }
 
 export interface SlotItem {
@@ -109,14 +142,33 @@ export interface DropItem {
   z: number;
 }
 
-export type SceneItem = CharacterItem | NodeItem | TentItem | SlotItem | DropItem;
+export type SceneItem = CharacterItem | NodeItem | TentItem | SlotItem | DropItem | FireItem;
 
 export interface SceneFrame {
   /** Cible caméra = joueur interpolé (m). */
   focus: { x: number; z: number };
-  welcome: { active: boolean; ratio: number };
-  /** Ordre stable : player, survivants (id), nœuds, tentes, slots, drops. */
+  /**
+   * `blockReason` : cause de fermeture de l'accueil (`welcomeBlockReason` du core) ⇒ libellé sur le
+   * tapis (« Feu éteint » / « Fermé jusqu'à l'aube »). `blockedByCold` = accueil fermé (raison non nulle).
+   */
+  welcome: { active: boolean; ratio: number; blockedByCold: boolean; blockReason: WelcomeBlock };
+  /** Ordre stable : player, survivants (id), nœuds, tentes, slots, drops, feu. */
   items: SceneItem[];
+  /** Éclairage au temps interpolé prev.tick + alpha. */
+  lighting: Lighting;
+  /** Entrées du cadrage portrait (file d'attente). */
+  framing: FramingInput;
+}
+
+/** Zone d'alimentation du feu, mise en cache par carte (la carte ne change pas en jeu). */
+const feedZoneCache = new WeakMap<object, readonly TilePos[]>();
+function cachedFeedZone(map: Readonly<MapState>): readonly TilePos[] {
+  let z = feedZoneCache.get(map);
+  if (!z) {
+    z = feedZone(map as MapState);
+    feedZoneCache.set(map, z);
+  }
+  return z;
 }
 
 function clamp01(v: number): number {
@@ -196,7 +248,7 @@ export function buildScene(prev: Readonly<GameState>, curr: Readonly<GameState>,
       z: toMeters(p.y),
       heading: m.heading,
       moving: m.moving,
-      visible: s.status !== "resting",
+      visible: s.status !== "resting" && s.status !== "sleeping",
     });
   }
 
@@ -224,8 +276,11 @@ export function buildScene(prev: Readonly<GameState>, curr: Readonly<GameState>,
   for (const t of curr.tents) {
     const c = tileMeters(t.tile);
     let rest: number | null = null;
+    let sleeping = false;
     if (t.status === "occupied" && t.occupantId !== null) {
-      const r1 = restRatio(currSurvivors.get(t.occupantId));
+      const occupant = currSurvivors.get(t.occupantId);
+      sleeping = occupant?.status === "sleeping";
+      const r1 = restRatio(occupant);
       const r0 = restRatio(prevSurvivors.get(t.occupantId));
       rest = r1 === null ? null : r0 === null || r0 > r1 ? r1 : r0 + (r1 - r0) * a;
     }
@@ -237,6 +292,7 @@ export function buildScene(prev: Readonly<GameState>, curr: Readonly<GameState>,
       status: t.status,
       clean: clamp01(t.cleanProgress / TENT.cleanTicks),
       rest,
+      sleeping,
       playerOn: isPlayerOn(curr, t.tile),
     });
   }
@@ -285,13 +341,46 @@ export function buildScene(prev: Readonly<GameState>, curr: Readonly<GameState>,
     });
   }
 
+  // Feu de camp (un seul, tuile fixe de la carte).
+  const fc = tileMeters(curr.map.fire);
+  const r1 = fireRatio(curr);
+  const r0 = fireRatio(prev);
+  const pt = playerTile(curr);
+  const feedShown = shownFeedRatio(prev, curr, a);
+  items.push({
+    key: "fire",
+    type: "fire",
+    x: fc.x,
+    z: fc.z,
+    ratio: clamp01(r0 + (r1 - r0) * a),
+    lit: isFireLit(curr),
+    low: isFireLow(curr),
+    feeding: isFeedingFire(curr),
+    playerNear: cachedFeedZone(curr.map).some((t) => sameTile(t, pt)),
+    feed: feedShown === null ? null : clamp01(feedShown),
+  });
+
+  // Cadrage portrait : places de file occupées (tête en premier).
+  const queue: { x: number; z: number }[] = [];
+  const n = Math.min(curr.queue.length, curr.map.queueTiles.length);
+  for (let i = 0; i < n; i++) {
+    const q = curr.map.queueTiles[i];
+    if (q) queue.push(tileMeters(q));
+  }
+
+  const tickF = prev.tick + (curr.tick > prev.tick ? (curr.tick - prev.tick) * a : a);
+  const blockReason = welcomeBlockReason(curr);
   return {
     focus,
     welcome: {
       active: isPlayerOn(curr, curr.map.welcome),
       ratio: clamp01(curr.welcomeProgress / WELCOME.ticks),
+      blockedByCold: blockReason !== null,
+      blockReason,
     },
     items,
+    lighting: lightingAt(tickF),
+    framing: { player: { x: focus.x, z: focus.z }, welcome: tileMeters(curr.map.welcome), queue },
   };
 }
 
@@ -326,6 +415,8 @@ export interface StaticLayout {
   /** Herbe décorative : jamais sur W/Q/E/T/B/portes ni sur les nœuds. */
   tufts: Placement[];
   decals: { kind: "welcome" | "queue" | "entrance"; x: number; z: number; w: number; d: number }[];
+  /** Tuile du feu de camp (sol en terre battue, aucune touffe), ou null si la carte n'en a pas. */
+  fireTile: TilePos | null;
 }
 
 /** Direction « vers l'extérieur » de l'entrée (bord de carte), ou null si l'entrée n'est pas au bord. */
@@ -381,6 +472,12 @@ function tileRand(tx: number, ty: number, salt: number): () => number {
     h = hash32(h, 0x2545f491);
     return hashUnit(h);
   };
+}
+
+/** Tuile du feu (cartes de test anciennes sans `fire` : null). */
+function fireTileOf(map: Readonly<MapState>): TilePos | null {
+  const f = (map as { fire?: TilePos }).fire;
+  return f ? { tx: f.tx, ty: f.ty } : null;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -509,5 +606,6 @@ export function buildStaticLayout(map: Readonly<MapState>): StaticLayout {
     rocks,
     tufts,
     decals,
+    fireTile: fireTileOf(map),
   };
 }

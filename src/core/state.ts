@@ -3,6 +3,7 @@
 
 import {
   BUILD,
+  FIRE,
   MAP_LAYOUT,
   STARTING_RESOURCES,
   SURVIVOR,
@@ -22,8 +23,11 @@ export interface TilePos {
   tx: number;
   ty: number;
 }
-/** `node` : tuile d'un nœud récoltable, obstacle statique (prêt ou épuisé). */
-export type Tile = "grass" | "tree" | "rock" | "node";
+/**
+ * `node` : tuile d'un nœud récoltable, obstacle statique (prêt ou épuisé).
+ * `fire` : tuile du feu de camp, obstacle permanent (docs/design/day-night.md §1.4).
+ */
+export type Tile = "grass" | "tree" | "rock" | "node" | "fire";
 export type { DropResource, NodeKind };
 export type Axis = -1 | 0 | 1;
 
@@ -34,6 +38,7 @@ export interface MapState {
   entrance: TilePos;
   welcome: TilePos;
   queueTiles: TilePos[]; // queueTiles[0] = tête
+  fire: TilePos; // tuile du feu de camp (statique, non sérialisée)
 }
 
 export interface PlayerState {
@@ -41,13 +46,17 @@ export interface PlayerState {
   input: { dx: Axis; dy: Axis };
 }
 
-export type SurvivorStatus = "toQueue" | "queued" | "walkingToTent" | "resting" | "leaving";
+/**
+ * `sleeping` : couché la nuit dans sa tente (centre de la tuile, chemin vide, restTicksLeft = 0) ;
+ * n'existe que la nuit, feu allumé (docs/design/day-night.md §1.3).
+ */
+export type SurvivorStatus = "toQueue" | "queued" | "walkingToTent" | "resting" | "sleeping" | "leaving";
 export interface Survivor {
   id: number;
   pos: Vec;
   status: SurvivorStatus;
   path: TilePos[]; // tuiles restantes à parcourir (vide si arrivé)
-  tentId: number | null; // non-null ssi walkingToTent | resting
+  tentId: number | null; // non-null ssi walkingToTent | resting | sleeping
   restTicksLeft: number; // > 0 seulement si resting
 }
 
@@ -55,7 +64,7 @@ export type TentStatus = "free" | "assigned" | "occupied" | "messy";
 export interface Tent {
   id: number;
   tile: TilePos;
-  status: TentStatus;
+  status: TentStatus; // occupied ⇔ occupant resting | sleeping
   occupantId: number | null; // non-null ssi assigned | occupied
   cleanProgress: number; // 0..TENT.cleanTicks, significatif si messy
 }
@@ -87,6 +96,28 @@ export interface BuildSlot {
   payCooldown: number; // ticks avant le prochain versement
 }
 
+/** Feu de camp (docs/design/day-night.md §1.4). Allumé ⇔ wood > 0. */
+export interface FireState {
+  wood: number; // 0..FIRE.capacity
+  burnedTotal: number; // bois brûlé depuis le début de la partie
+  /**
+   * Ticks consécutifs où le joueur est arrêté (input 0,0) dans la zone d'alimentation,
+   * 0..FIRE.feedDelayTicks ; l'alimentation n'a lieu qu'à FIRE.feedDelayTicks. > 0 ⇒ joueur dans la zone.
+   */
+  feedProgress: number;
+}
+
+/**
+ * Bilan de la nuit : nuit en cours (la nuit) ou dernière nuit terminée (le jour).
+ * Remis à 0 au pas du crépuscule (docs/design/day-night.md §1.6).
+ */
+export interface NightStats {
+  coldLeavers: number; // dormeurs partis à cause du froid (récompense réduite)
+  sleepersPaid: number; // dormeurs payés en entier au pas de l'aube
+  woodEarned: number; // bois déposé par ces départs
+  woodBurned: number; // combustions des ticks de nuit
+}
+
 export interface GameState {
   tick: number;
   rng: RngState;
@@ -103,6 +134,12 @@ export interface GameState {
   welcomeProgress: number; // 0..WELCOME.ticks
   commandsThisTick: number; // anti-spam, remis à 0 par tick()
   nodes: ResourceNode[]; // triés par id, ordre de lecture de la carte
+  fire: FireState;
+  night: NightStats;
+}
+
+export function emptyNightStats(): NightStats {
+  return { coldLeavers: 0, sleepersPaid: 0, woodEarned: 0, woodBurned: 0 };
 }
 
 export function createInitialState(seed: number): GameState {
@@ -153,6 +190,8 @@ export function createInitialState(seed: number): GameState {
     welcomeProgress: 0,
     commandsThisTick: 0,
     nodes,
+    fire: { wood: FIRE.initialWood, burnedTotal: 0, feedProgress: 0 },
+    night: emptyNightStats(),
   };
 }
 
@@ -169,5 +208,7 @@ export function cloneState(s: GameState): GameState {
     drops: s.drops.map((d) => ({ ...d, pos: { ...d.pos } })),
     buildSlots: s.buildSlots.map((b) => ({ ...b, tile: { ...b.tile } })),
     nodes: s.nodes.map((n) => ({ ...n, tile: { ...n.tile } })),
+    fire: { ...s.fire },
+    night: { ...s.night },
   };
 }

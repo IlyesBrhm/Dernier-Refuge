@@ -51,20 +51,42 @@ export interface ViewKit {
   readonly characters: CharacterKit;
   /** Buisson vide : matériau désaturé (#8a9a7c). */
   readonly emptyBush: MaterialVariants;
-  /** Tente en désordre : matériau assombri (× 0,75). */
+  /** Tente en désordre : matériau sali (× 0,7, teinté #b89a7a). */
   readonly messyTent: MaterialVariants;
   /** Tente libre / assignée : toile éclaircie et verdie, légère lueur (lisible comme « disponible »). */
   readonly freeTent: MaterialVariants;
+  /** Tente occupée : couleurs d'origine + léger auto-éclairage de la toile (lisible de nuit). */
+  readonly closedTent: MaterialVariants;
+  /** Foyer du feu : palette Kenney ramenée vers des tons terre (bûches brunes, pierres beige-gris). */
+  readonly firePit: MaterialVariants;
   dispose(): void;
+}
+
+/**
+ * Auto-éclairage « × texture » : emissive = couleur × carte de base. La toile garde sa propre couleur
+ * quelle que soit la lumière (nuit bleue, crépuscule orangé) au lieu de ne montrer que l'armature.
+ */
+function selfLit(m: THREE.Material, color: number): void {
+  if (!("emissive" in m) || !(m.emissive instanceof THREE.Color)) return;
+  m.emissive.setHex(color);
+  if ("map" in m && "emissiveMap" in m && m.map instanceof THREE.Texture) {
+    (m as THREE.MeshStandardMaterial).emissiveMap = m.map;
+  }
 }
 
 export function createViewKit(lib: AssetLibrary, proc: Procedural, characters: CharacterKit): ViewKit {
   const emptyBush = materialVariants((m) => colorOf(m)?.setHex(COLORS3D.bushEmpty));
-  const messyTent = materialVariants((m) => colorOf(m)?.multiplyScalar(ANIM.messyDarken));
+  const messyTint = new THREE.Color(COLORS3D.tentMessyTint);
+  const messyTent = materialVariants((m) => {
+    colorOf(m)?.multiplyScalar(ANIM.messyDarken).multiply(messyTint);
+    selfLit(m, COLORS3D.tentMessySelfLit);
+  });
   const freeTent = materialVariants((m) => {
     colorOf(m)?.multiply(new THREE.Color(COLORS3D.tentFreeTint));
-    if ("emissive" in m && m.emissive instanceof THREE.Color) m.emissive.setHex(COLORS3D.tentFreeGlow);
+    selfLit(m, COLORS3D.tentFreeGlow);
   });
+  const closedTent = materialVariants((m) => selfLit(m, COLORS3D.tentSelfLit));
+  const firePit = materialVariants((m) => colorOf(m)?.multiply(new THREE.Color(COLORS3D.firePitTint)));
   return {
     lib,
     proc,
@@ -72,12 +94,28 @@ export function createViewKit(lib: AssetLibrary, proc: Procedural, characters: C
     emptyBush,
     messyTent,
     freeTent,
+    closedTent,
+    firePit,
     dispose() {
       emptyBush.dispose();
       messyTent.dispose();
       freeTent.dispose();
+      closedTent.dispose();
+      firePit.dispose();
     },
   };
+}
+
+/**
+ * Met un modèle (sans parent) à l'échelle pour que sa plus grande dimension au sol vaille `meters`.
+ * Mesure faite sur la copie : aucun effet sur le modèle source de la bibliothèque.
+ */
+export function fitFootprint(model: THREE.Object3D, meters: number): void {
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const m = Math.max(size.x, size.z);
+  if (m > 1e-6) model.scale.multiplyScalar(meters / m);
 }
 
 /** Remplace les matériaux de tous les maillages d'un objet (clone de modèle : maillages propres). */

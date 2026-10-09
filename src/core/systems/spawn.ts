@@ -5,11 +5,14 @@ import { tileCenter } from "../map";
 import { findPath } from "../path";
 import { nextInt } from "../rng";
 import type { GameState } from "../state";
+import { isNight } from "../time";
 import { pure } from "./helpers";
 
 export function mutateSpawn(draft: GameState): void {
   if (draft.spawnTimer > 0) draft.spawnTimer -= 1;
   if (draft.spawnTimer > 0) return;
+  // Nuit ⇒ aucune arrivée : minuteur gelé à 0, aucun RNG consommé (docs/design/day-night.md §1.2).
+  if (isNight(draft.tick)) return;
   // File pleine ⇒ minuteur gelé à 0, aucun RNG consommé.
   if (draft.queue.length >= QUEUE.maxLength) return;
   const slot = draft.map.queueTiles[draft.queue.length];

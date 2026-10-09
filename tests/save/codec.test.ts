@@ -4,7 +4,7 @@ import {
   decodeSave,
   encodeSave,
   SAVE_CONFIG,
-  validateSavedStateV1,
+  validateSavedState,
   type DecodeError,
   type DecodeResult,
 } from "../../src/save/index";
@@ -70,7 +70,7 @@ describe("aller-retour", () => {
     const reordered = Object.fromEntries(Object.entries(shuffled).reverse()) as unknown as GameState;
     expect(enc(reordered)).toBe(MID_TEXT);
     expect(MID_TEXT.startsWith('{"checksum":"')).toBe(true);
-    expect(MID_TEXT).toMatch(/"version":1}$/);
+    expect(MID_TEXT).toMatch(new RegExp(`"version":${CURRENT_VERSION}}$`));
   });
 
   it("encodeSave refuse NaN / Infinity / seed ou savedAt invalides sans lever", () => {
@@ -253,17 +253,17 @@ describe("enveloppe et versions", () => {
   });
 });
 
-describe("validateSavedStateV1 (forme seule)", () => {
+describe("validateSavedState (forme seule)", () => {
   it("état valide ⇒ aucune erreur", () => {
     const { map: _m, ...saved } = MID;
-    expect(validateSavedStateV1(saved)).toEqual([]);
+    expect(validateSavedState(saved)).toEqual([]);
   });
 
   it("NaN et Infinity refusés même s'ils ne viennent pas de JSON", () => {
     const { map: _m, ...saved } = cloneState(MID);
     saved.resources.wood = NaN;
     saved.player.pos.y = Infinity;
-    const errs = validateSavedStateV1(saved);
+    const errs = validateSavedState(saved);
     expect(errs.some((e) => e.includes("resources.wood"))).toBe(true);
     expect(errs.some((e) => e.includes("player.pos.y"))).toBe(true);
   });
@@ -271,12 +271,12 @@ describe("validateSavedStateV1 (forme seule)", () => {
   it("chemins d'erreur précis et nombre d'erreurs borné", () => {
     const { map: _m, ...saved } = cloneState(MID);
     (saved.survivors[1]!.pos as unknown as Record<string, unknown>).x = "a";
-    expect(validateSavedStateV1(saved)).toContain('state.survivors[1].pos.x: entier sûr attendu ("a")');
+    expect(validateSavedState(saved)).toContain('state.survivors[1].pos.x: entier sûr attendu ("a")');
     const many = { ...saved, drops: Array.from({ length: 500 }, () => ({ bad: 1 })) };
-    expect(validateSavedStateV1(many).length).toBeLessThanOrEqual(SAVE_CONFIG.maxShapeErrors + 1);
+    expect(validateSavedState(many).length).toBeLessThanOrEqual(SAVE_CONFIG.maxShapeErrors + 1);
   });
 
   it("non-objets ⇒ erreur, sans exception", () => {
-    for (const v of [null, undefined, 1, "s", [], new Date()]) expect(validateSavedStateV1(v).length).toBeGreaterThan(0);
+    for (const v of [null, undefined, 1, "s", [], new Date()]) expect(validateSavedState(v).length).toBeGreaterThan(0);
   });
 });

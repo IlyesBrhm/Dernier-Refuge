@@ -7,14 +7,14 @@ import { CanonicalError, canonicalStringify } from "./canonical";
 import { CURRENT_VERSION, SAVE_CONFIG } from "./config";
 import { hash64 } from "./hash";
 import { migrate, type MigrationRegistry } from "./migrations";
-import { validateSavedStateV1, type SavedStateV1 } from "./schema";
+import { validateSavedState, type SavedState } from "./schema";
 
 export interface SaveEnvelope {
   version: number;
   savedAt: number;
   seed: number;
   checksum: string;
-  state: SavedStateV1;
+  state: SavedState;
 }
 
 export type DecodeError =
@@ -87,7 +87,7 @@ export function computeChecksum(version: number, savedAt: number, seed: number, 
 }
 
 /** Retire la carte (non sérialisée) de l'état. */
-export function toSavedState(state: GameState): SavedStateV1 {
+export function toSavedState(state: GameState): SavedState {
   const { map: _map, ...saved } = state;
   return saved;
 }
@@ -184,12 +184,12 @@ function decodeUnsafe(text: unknown, opts: DecodeOptions): DecodeResult {
   });
   if (!migrated.ok) return fail("migration_failed", migrated.details, v);
 
-  // 7. Forme stricte.
-  const shapeErrors = validateSavedStateV1(migrated.raw);
+  // 7. Forme stricte (forme COURANTE : le résultat de la migration est validé comme une save native).
+  const shapeErrors = validateSavedState(migrated.raw);
   if (shapeErrors.length > 0) return fail("bad_shape", shapeErrors, v);
 
   // 8. Carte reconstruite (jamais lue depuis le fichier) puis invariants du core.
-  const state: GameState = { ...(migrated.raw as SavedStateV1), map: referenceMap() };
+  const state: GameState = { ...(migrated.raw as SavedState), map: referenceMap() };
   let violations: string[];
   try {
     violations = checkInvariants(state);

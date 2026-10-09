@@ -13,12 +13,15 @@
 // SALT et hash64 ne changent jamais.
 
 import { CURRENT_VERSION } from "./config";
+import { migrateV1toV2 } from "./migrate-v1";
 
 export type Migration = (raw: unknown) => unknown;
 export type MigrationRegistry = Readonly<Record<number, Migration>>;
 
-/** Registre officiel. Vide en v1 (aucune version antérieure). */
-export const migrations: MigrationRegistry = Object.freeze({});
+/** Registre officiel : migrations[n] = vN → vN+1. */
+export const migrations: MigrationRegistry = Object.freeze({
+  1: migrateV1toV2, // jour/nuit : fire, night, sleeping, tuile F (docs/design/day-night.md §2.2)
+});
 
 export type MigrateResult = { ok: true; raw: unknown } | { ok: false; details: string[] };
 
@@ -40,7 +43,8 @@ export function migrate(
     try {
       cur = step(cur);
     } catch (e) {
-      return { ok: false, details: [`migration v${v} → v${v + 1} a échoué : ${String(e)}`] };
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, details: [`migration v${v} → v${v + 1} a échoué : ${msg}`] };
     }
   }
   return { ok: true, raw: cur };

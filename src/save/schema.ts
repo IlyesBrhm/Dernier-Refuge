@@ -1,7 +1,11 @@
-// Validation de FORME stricte de l'état sauvegardé v1, écrite à la main (aucune dépendance).
+// Validation de FORME stricte de l'état sauvegardé, écrite à la main (aucune dépendance).
 // Vérifiée AVANT les invariants du core (qui supposent des types corrects) : types exacts, entiers sûrs,
 // enums exacts, objets stricts (clé manquante ou inconnue = erreur, `__proto__` refusé), tailles max.
 // Ne répare rien : renvoie la liste des erreurs (vide = forme valide).
+//
+// - `validateSavedState` : forme COURANTE (v2), utilisée par le pipeline après les migrations.
+// - `validateSavedStateV1` : forme v1 historique (sans `fire`/`night`, sans statut `sleeping`), utilisée
+//   par la migration v1 → v2 pour refuser de transformer une v1 mal formée (docs/design/day-night.md §2.2).
 
 import { WORLD } from "../data/balance";
 import {
@@ -16,8 +20,14 @@ import {
 } from "../core/index";
 import { SAVE_CONFIG } from "./config";
 
-/** Ce qui est sérialisé : tout l'état sauf la carte (statique, reconstruite au chargement). */
-export type SavedStateV1 = Omit<GameState, "map">;
+/** Ce qui est sérialisé (forme courante, v2) : tout l'état sauf la carte (statique, reconstruite au chargement). */
+export type SavedState = Omit<GameState, "map">;
+
+/**
+ * Forme v1 historique : sans `fire` ni `night`, et `status` sans `sleeping` (vérifié par
+ * `validateSavedStateV1`, pas par ce type, qui réutilise les types courants).
+ */
+export type SavedStateV1 = Omit<SavedState, "fire" | "night">;
 
 type Validator = (v: unknown, path: string, errs: string[]) => void;
 
@@ -112,7 +122,16 @@ export function arr(item: Validator, maxLen: number): Validator {
 
 type Exhaustive<All, Listed> = [Exclude<All, Listed>] extends [never] ? true : false;
 
-const SURVIVOR_STATUSES = ["toQueue", "queued", "walkingToTent", "resting", "leaving"] as const satisfies readonly SurvivorStatus[];
+const SURVIVOR_STATUSES = [
+  "toQueue",
+  "queued",
+  "walkingToTent",
+  "resting",
+  "sleeping",
+  "leaving",
+] as const satisfies readonly SurvivorStatus[];
+/** Statuts acceptés par la forme v1 (avant l'ajout de `sleeping` en v2). */
+const SURVIVOR_STATUSES_V1 = SURVIVOR_STATUSES.filter((s) => s !== "sleeping");
 const TENT_STATUSES = ["free", "assigned", "occupied", "messy"] as const satisfies readonly TentStatus[];
 const NODE_STATUSES = ["ready", "depleted"] as const satisfies readonly NodeStatus[];
 const NODE_KINDS = ["tree", "bush"] as const satisfies readonly NodeKind[];
@@ -129,7 +148,7 @@ const _exhaustive: [
 ] = [true, true, true, true, true];
 void _exhaustive;
 
-// --- Schéma v1 ----------------------------------------------------------------------------------
+// --- Schémas v1 et v2 ---------------------------------------------------------------------------
 
 const MAP = referenceMap();
 const U = WORLD.unitsPerTile;
@@ -150,24 +169,32 @@ const RESOURCE_SHAPE: Record<ResourceId, Validator> = {
   coins: int(),
 };
 
-const STATE_SHAPE: { [K in keyof SavedStateV1]-?: Validator } = {
+function survivorsShape(statuses: readonly string[]): Validator {
+  return arr(
+    obj({
+      id,
+      pos: vec,
+      status: oneOf(statuses),
+      path: arr(tilePos, L.path),
+      tentId: nullable(id),
+      restTicksLeft: int(),
+    }),
+    L.survivors,
+  );
+}
+
+/**
+ * Clés communes v1/v2, sauf `survivors` (enum de statuts différent). Partagées tant que leur forme est
+ * identique dans les deux versions : si une version future change l'une d'elles, la DUPLIQUER pour
+ * garder la forme v1 figée.
+ */
+const COMMON_SHAPE: { [K in Exclude<keyof SavedStateV1, "survivors">]-?: Validator } = {
   tick: int(0),
   rng: int(0, 0xffffffff),
   nextId: int(1),
   player: obj({ pos: vec, input: obj({ dx: axis, dy: axis }) }),
   resources: obj(RESOURCE_SHAPE),
   queue: arr(id, L.queue),
-  survivors: arr(
-    obj({
-      id,
-      pos: vec,
-      status: oneOf(SURVIVOR_STATUSES),
-      path: arr(tilePos, L.path),
-      tentId: nullable(id),
-      restTicksLeft: int(),
-    }),
-    L.survivors,
-  ),
   tents: arr(
     obj({ id, tile: tilePos, status: oneOf(TENT_STATUSES), occupantId: nullable(id), cleanProgress: int() }),
     L.tents,
@@ -193,11 +220,38 @@ const STATE_SHAPE: { [K in keyof SavedStateV1]-?: Validator } = {
   ),
 };
 
-const validateRoot = obj(STATE_SHAPE);
+/**
+ * Forme v2 (docs/design/day-night.md §5) : statut `sleeping`, feu et bilan de nuit (objets stricts).
+ * Seuls les types sont vérifiés ici (entiers sûrs) ; les BORNES (feu ≤ capacité, burnedTotal ≤
+ * combustions possibles, bilan cohérent avec l'heure…) sont des invariants du core, vérifiés ensuite.
+ */
+const STATE_SHAPE: { [K in keyof SavedState]-?: Validator } = {
+  ...COMMON_SHAPE,
+  survivors: survivorsShape(SURVIVOR_STATUSES),
+  // feedProgress : compteur d'immobilité avant alimentation (0..FIRE.feedDelayTicks, borne = invariant du core).
+  fire: obj({ wood: int(), burnedTotal: int(), feedProgress: int() }),
+  night: obj({ coldLeavers: int(), sleepersPaid: int(), woodEarned: int(), woodBurned: int() }),
+};
 
-/** Erreurs de forme de l'état v1 (chemins type `survivors[3].pos.x`). Vide = forme valide. Ne lève pas. */
-export function validateSavedStateV1(raw: unknown): string[] {
+/** Forme v1 historique (gelée : ne jamais la modifier, des sauvegardes v1 existent). */
+const STATE_SHAPE_V1: { [K in keyof SavedStateV1]-?: Validator } = {
+  ...COMMON_SHAPE,
+  survivors: survivorsShape(SURVIVOR_STATUSES_V1),
+};
+
+const validateRoot = obj(STATE_SHAPE);
+const validateRootV1 = obj(STATE_SHAPE_V1);
+
+/** Erreurs de forme de l'état courant (v2) (chemins type `survivors[3].pos.x`). Vide = forme valide. Ne lève pas. */
+export function validateSavedState(raw: unknown): string[] {
   const errs: string[] = [];
   validateRoot(raw, "state", errs);
+  return errs;
+}
+
+/** Erreurs de forme d'un état v1 (avant migration). Vide = forme v1 valide. Ne lève pas. */
+export function validateSavedStateV1(raw: unknown): string[] {
+  const errs: string[] = [];
+  validateRootV1(raw, "state", errs);
   return errs;
 }

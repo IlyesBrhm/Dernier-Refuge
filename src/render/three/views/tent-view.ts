@@ -1,7 +1,9 @@
 // Vue d'une tente, trois aspects distincts :
 // - libre / assignée : tente montée (toile) éclaircie et verdie + liseré au sol (vert ; jaune pulsé si assignée) ;
-// - occupée : même tente aux couleurs d'origine, sans liseré (barre de repos sur le calque 2D) ;
-// - en désordre : toile à moitié, assombrie et inclinée (« ! » + barre de nettoyage sur le calque).
+// - occupée : même tente aux couleurs d'origine, sans liseré (barre de repos ou bulle « Zz » d'un
+//   dormeur sur le calque 2D) ;
+// - en désordre : même toile AFFAISSÉE (écrasée, élargie, inclinée), salie, + sac de couchage de
+//   travers devant la porte (« ! » + barre de nettoyage sur le calque).
 // Apparition « pop » quand la tente est construite en cours de partie.
 
 import * as THREE from "three";
@@ -9,7 +11,28 @@ import type { TentStatus } from "../../../core";
 import { ANIM, MODEL_IDS, MODEL_YAW } from "../config";
 import { DECAL_Y } from "../procedural";
 import type { TentItem } from "../scene-model";
-import { easeOutBack, setMaterials, type FrameContext, type ViewKit } from "./kit";
+import { easeOutBack, fitFootprint, setMaterials, type FrameContext, type ViewKit } from "./kit";
+
+/**
+ * Tente en désordre : toile affaissée et salie + sac de couchage devant la porte (+Z).
+ * Exportée pour le warm-up (programmes compilés au chargement).
+ */
+export function createMessyTent(kit: ViewKit): THREE.Group {
+  const g = new THREE.Group();
+  g.name = "tent-messy";
+  const tent = kit.lib.create(MODEL_IDS.tent);
+  setMaterials(tent, (b) => kit.messyTent.get(b), new Map());
+  tent.scale.x *= ANIM.messyScaleX;
+  tent.scale.y *= ANIM.messyScaleY;
+  tent.rotation.z = ANIM.messyTiltRad;
+  g.add(tent);
+  const bedroll = kit.lib.create(MODEL_IDS.bedroll);
+  fitFootprint(bedroll, ANIM.bedrollLength);
+  bedroll.position.set(ANIM.bedrollOffset[0], 0, ANIM.bedrollOffset[1]);
+  bedroll.rotation.y = ANIM.bedrollYaw;
+  g.add(bedroll);
+  return g;
+}
 
 type TentLook = "free" | "closed" | "messy";
 
@@ -44,12 +67,12 @@ export class TentView {
   private modelFor(look: TentLook): THREE.Group {
     let m = this.models.get(look);
     if (!m) {
-      m = this.kit.lib.create(look === "messy" ? MODEL_IDS.tentMessy : MODEL_IDS.tent);
       if (look === "messy") {
-        setMaterials(m, (b) => this.kit.messyTent.get(b), new Map());
-        m.rotation.z = ANIM.messyTiltRad;
-      } else if (look === "free") {
-        setMaterials(m, (b) => this.kit.freeTent.get(b), new Map());
+        m = createMessyTent(this.kit);
+      } else {
+        m = this.kit.lib.create(MODEL_IDS.tent);
+        const variants = look === "free" ? this.kit.freeTent : this.kit.closedTent;
+        setMaterials(m, (b) => variants.get(b), new Map());
       }
       this.models.set(look, m);
       this.pivot.add(m);

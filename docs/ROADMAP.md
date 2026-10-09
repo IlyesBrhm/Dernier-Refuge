@@ -36,10 +36,15 @@
 
 > Note : les zones de construction à remplir progressivement et la tente existent en version minimale (core loop, cf. `docs/design/core-loop.md`) ; non cochées tant que la version complète n'est pas faite.
 
-## Jalon 4 — Temps & danger
-- [ ] Cycle jour/nuit (teinte, visibilité)
+## Jalon 4 — Temps & danger — plan : `docs/design/day-night.md`
+- [x] Cycle jour/nuit (teinte, visibilité)
+- [x] Feu de camp à entretenir (sommeil, froid, bilan de l'aube)
 - [ ] Saisons (repousse, chauffage, palette)
 - [ ] Menaces nocturnes (loup animé) + palissade, torches, gardes
+
+> Notes : 3D par défaut (repli 2D, `?render=2d`). Sauvegarde **v2** (`fire`, `night`, statut `sleeping`, tuile F) avec
+> migration v1 → v2 et fixtures v2. Accueil fermé jusqu'à l'aube après un départ au froid (`welcomeBlockReason`,
+> bot « mixte » : entretenir le feu reste la meilleure stratégie). Coût du feu à rééquilibrer avec les loups.
 
 ## Jalon 5 — Progression & polish
 - [ ] Objectifs, étoiles, nouvelles zones

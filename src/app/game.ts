@@ -104,6 +104,8 @@ export function startGame({ initialState, renderer, hud, input }: GameDeps): Gam
       lastViolations = "";
       input.releaseAll();
       renderer.reset();
+      // HUD / bilan de l'aube : oublient ce qu'ils ont retenu de la partie précédente.
+      hud.reset?.();
       if (import.meta.env.DEV) checkDev(curr);
     },
     setPaused(p: boolean): void {

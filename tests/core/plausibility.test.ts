@@ -7,12 +7,12 @@
 
 import { NODES, PLAUSIBILITY, STARTING_RESOURCES, TIME } from "../../src/data/balance";
 import { applyCommand } from "../../src/core/commands";
-import { checkInvariants, heldTotal } from "../../src/core/invariants";
+import { checkInvariants, heldTotal, plausibleMax } from "../../src/core/invariants";
 import { isWalkable, tileOf } from "../../src/core/map";
 import { findPath } from "../../src/core/path";
 import type { DropResource, GameState, TilePos } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
-import { fresh, harvestSpot, steer } from "./helpers";
+import { attentiveFireGoal, fireReserve, fresh, harvestSpot, steer } from "./helpers";
 
 /** Part maximale de la limite qu'un joueur honnête peut atteindre (marge de sécurité ×2). */
 const MAX_SHARE = 0.5;
@@ -38,12 +38,15 @@ const OFF_PREFERENCE_PENALTY = 1_000_000;
  * `prefer` : ressource dont on cherche le pire cas (ses nœuds passent toujours en premier).
  */
 function fastGoal(s: GameState, prefer: DropResource): TilePos {
+  // Feu entretenu (docs/design/day-night.md) : c'est ce qui maximise les gains (paiement de l'aube).
+  const fire = attentiveFireGoal(s);
+  if (fire) return fire;
   const messy = s.tents.find((t) => t.status === "messy");
   if (messy) return messy.tile;
   const drop = s.drops.find((d) => isWalkable(s.map, tileOf(d.pos)));
   if (drop) return tileOf(drop.pos);
   const slot = s.buildSlots.find((b) => b.builtTentId === null);
-  if (slot && s.resources.wood > 0 && s.resources.wood >= slot.cost - slot.paid) return slot.tile;
+  if (slot && s.resources.wood - fireReserve(s) >= slot.cost - slot.paid && s.resources.wood > 0) return slot.tile;
   const head = s.survivors.find((v) => v.id === s.queue[0]);
   if (head?.status === "queued" && s.tents.some((t) => t.status === "free")) return s.map.welcome;
   let best: { spot: TilePos; cost: number } | null = null;
@@ -70,8 +73,9 @@ interface RunStats {
   allBuiltAt: number | null;
 }
 
+/** Production depuis le départ : détenu − détenu au tick 0 (départ + réserve initiale du feu). */
 function produced(s: GameState, r: DropResource): number {
-  return heldTotal(s, r) - STARTING_RESOURCES[r];
+  return heldTotal(s, r) - plausibleMax({ ...s, tick: 0 }, r);
 }
 
 function runFastBot(seed: number, ticks: number, prefer: DropResource): RunStats {
@@ -135,9 +139,10 @@ describe("plausibilité — bot producteur maximal, 30 min de jeu, plusieurs see
       expect(res.final.tents).toHaveLength(1 + res.final.buildSlots.length);
       expect(res.final.tents).toHaveLength(4);
       expect(res.allBuiltAt!).toBeLessThan(THIRTY_MINUTES / 3);
-      // Le bot produit vraiment (sinon le test ne prouve rien) : accueils en continu (≈ 1 / 100 ticks)
+      // Le bot produit vraiment (sinon le test ne prouve rien) : accueils en continu de jour
+      // (≈ 1 / 100 ticks ; aucune arrivée la nuit, soit 1/3 du temps : 115 à 122 observés sur 30 min)
       // et, pour la ressource visée, une part substantielle du maximum permis par la repousse.
-      expect(res.welcomed).toBeGreaterThan(150);
+      expect(res.welcomed).toBeGreaterThan(100);
       expect(produced(res.final, "wood")).toBeGreaterThan(1000);
       if (prefer === "food") expect(produced(res.final, "food")).toBeGreaterThan(150);
       // Taux observés, en clair dans le rapport en cas d'échec.

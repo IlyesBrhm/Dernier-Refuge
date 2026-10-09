@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { COLORS3D, TILE_METERS } from "./config";
+import { COLORS3D, FIRE3D, TILE_METERS } from "./config";
 import { slotTexture } from "./ground-labels";
 
 /** Hauteur des décalques au sol (au-dessus du sol, sous les objets). */
@@ -33,6 +33,15 @@ export interface Procedural {
   berryCluster: { geometry: THREE.BufferGeometry; material: THREE.Material };
   /** Baie isolée (InstancedMesh des buissons). */
   berry: { geometry: THREE.BufferGeometry; material: THREE.Material };
+  /**
+   * Feu de camp (un seul feu : géométries de particules partagées et réécrites à chaque image).
+   * Flammes : 24 points additifs ; fumée : 6 points gris (feu éteint) ; braises : icosaèdre émissif.
+   */
+  fire: {
+    flames: { geometry: THREE.BufferGeometry; material: THREE.PointsMaterial };
+    smoke: { geometry: THREE.BufferGeometry; material: THREE.PointsMaterial };
+    embers: { geometry: THREE.BufferGeometry; material: THREE.MeshLambertMaterial };
+  };
   /** Nouvelle géométrie d'anneau de progression (une par emplacement : drawRange propre). */
   createSlotRing(): THREE.BufferGeometry;
   /** Matériaux / géométries à précompiler et téléverser (warm-up). */
@@ -78,6 +87,26 @@ function flatRing(inner: number, outer: number, segments: number, thetaStart = 0
   const g = new THREE.RingGeometry(inner, outer, segments, 1, thetaStart);
   g.rotateX(-Math.PI / 2);
   return g;
+}
+
+/** Disque radial blanc → transparent (32 px) pour les particules du feu. */
+function radialTexture(): THREE.CanvasTexture {
+  const size = 32;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.4, "rgba(255,255,255,0.6)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 function decalMaterial(color: number, opacity: number): THREE.MeshBasicMaterial {
@@ -213,6 +242,64 @@ export function createProcedural(anisotropy: number): Procedural {
     material: keep(new THREE.MeshLambertMaterial({ color: 0xffffff })),
   };
 
+  // --- Feu de camp ---
+  const sprite = keep(radialTexture());
+  const pointsGeometry = (count: number): THREE.BufferGeometry => {
+    const g = new THREE.BufferGeometry();
+    const pos = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+    pos.setUsage(THREE.DynamicDrawUsage);
+    const col = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+    col.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute("position", pos);
+    g.setAttribute("color", col);
+    // Sphère englobante fixe (positions réécrites à chaque image, autour de l'origine du feu).
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 2.5);
+    return keep(g);
+  };
+  const fire = {
+    flames: {
+      geometry: pointsGeometry(FIRE3D.flameCount),
+      material: keep(
+        new THREE.PointsMaterial({
+          size: FIRE3D.flameSize,
+          map: sprite,
+          vertexColors: true,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true,
+          // Additif : le brouillard (bleu la nuit) s'ajouterait aux flammes ; elles restent pures.
+          fog: false,
+        }),
+      ),
+    },
+    smoke: {
+      geometry: pointsGeometry(FIRE3D.smokeCount),
+      material: keep(
+        new THREE.PointsMaterial({
+          size: FIRE3D.smokeSize,
+          map: sprite,
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false,
+          sizeAttenuation: true,
+        }),
+      ),
+    },
+    embers: {
+      geometry: (() => {
+        const g = new THREE.IcosahedronGeometry(FIRE3D.emberRadius, 0);
+        g.scale(1, 0.45, 1);
+        g.translate(0, FIRE3D.emberHeight, 0);
+        return keep(g);
+      })(),
+      material: keep(
+        new THREE.MeshLambertMaterial({ color: COLORS3D.emberBase, emissive: COLORS3D.emberGlow, flatShading: true }),
+      ),
+    },
+  };
+
   return {
     stump,
     targetRing,
@@ -222,8 +309,10 @@ export function createProcedural(anisotropy: number): Procedural {
     logs,
     berryCluster,
     berry,
+    fire,
     createSlotRing: () => flatRing(0.8, 0.95, 64, Math.PI / 2),
     all: () => [
+      fire.embers,
       stump,
       targetRing,
       playerRing,

@@ -47,7 +47,7 @@ describe("findPath (BFS)", () => {
   it("renvoie null si la cible est inatteignable ou un obstacle", () => {
     expect(findPath(map, map.entrance, { tx: 5, ty: 4 })).toBeNull(); // rocher
     expect(findPath(map, map.entrance, { tx: -1, ty: 0 })).toBeNull(); // hors carte
-    const island = parseMap(["######", "#PW#.#", "#QE###", "######"]).map;
+    const island = parseMap(["######", "#PW#.#", "#QEF##", "######"]).map;
     expect(findPath(island, { tx: 1, ty: 1 }, { tx: 4, ty: 1 })).toBeNull();
   });
 

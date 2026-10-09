@@ -1,8 +1,9 @@
-// Renderer 3D (prototype, `?render=3d`) derrière l'interface Renderer existante.
+// Renderer 3D (rendu par défaut ; `?render=2d` force la 2D) derrière l'interface Renderer existante.
 // Chargé UNIQUEMENT par import() dynamique depuis src/main.ts : three.js reste hors du bundle 2D.
 // LECTURE SEULE : ne reçoit que des Readonly<GameState>, n'appelle jamais applyCommand.
 //
-// Chaque draw : buildScene (pur) → réconciliation des vues → mixers → caméra → render → calque 2D.
+// Chaque draw : buildScene (pur) → feu → stage.setLighting (jour/nuit, feu, joueur, ombres) →
+// réconciliation des vues → mixers → caméra → render → calque 2D.
 
 import * as THREE from "three";
 import { referenceMap, type GameState, type MapState } from "../../core";
@@ -19,8 +20,12 @@ import { createReconciler, type Reconciler } from "./reconcile";
 import { buildScene, buildStaticLayout, type SceneFrame } from "./scene-model";
 import { createStage, type Stage } from "./stage";
 import { createStaticLayer, type StaticLayer } from "./static-layer";
+import { FireView } from "./views/fire-view";
 import { createBerryLayer, createViewKit, setMaterials, type BerryLayer, type FrameContext, type ViewKit } from "./views/kit";
+import { createMessyTent } from "./views/tent-view";
 import { detectWebGL } from "./webgl-support";
+import type { LightPhase } from "../../core";
+import type { ShadowOwner } from "../daylight";
 
 export { Render3DError, isRender3DError, type Render3DFailure } from "./errors";
 
@@ -37,6 +42,12 @@ export interface Render3DInfo {
   triangles: number;
   geometries: number;
   textures: number;
+  /** Sous-phase de lumière affichée à la dernière image (null avant la première image). */
+  light: LightPhase | null;
+  /** Lumière qui porte l'ombre : "sun" | "fire". */
+  shadow: ShadowOwner;
+  /** Feu affiché allumé à la dernière image. */
+  fireLit: boolean;
 }
 
 /** Nombre max de buissons pris en charge par le calque de baies (6 baies chacun). */
@@ -137,8 +148,10 @@ async function assemble(
   const kit: ViewKit = createViewKit(library, proc, characters);
   cleanups.push(() => kit.dispose());
   kit.emptyBush.prepare(library.meshes(MODEL_IDS.bush));
-  kit.messyTent.prepare(library.meshes(MODEL_IDS.tentMessy));
+  kit.messyTent.prepare(library.meshes(MODEL_IDS.tent));
   kit.freeTent.prepare(library.meshes(MODEL_IDS.tent));
+  kit.closedTent.prepare(library.meshes(MODEL_IDS.tent));
+  kit.firePit.prepare(library.meshes(MODEL_IDS.campfire));
 
   const dynamic = new THREE.Group();
   dynamic.name = "dynamic";
@@ -160,6 +173,10 @@ async function assemble(
   playerRing.renderOrder = 1;
   scene.add(playerRing);
   cleanups.push(() => playerRing.removeFromParent());
+  // Feu de camp : vue unique et persistante (foyer + flammes + braises), réutilisée après reset().
+  const fireView = new FireView(kit);
+  scene.add(fireView.object);
+  cleanups.push(() => fireView.destroy());
 
   let staticLayer: StaticLayer | null = null;
   /** Centre du tapis d'accueil (m), recalculé seulement quand la carte change. */
@@ -184,18 +201,21 @@ async function assemble(
   const warm = new THREE.Group();
   const warmChars = CHARACTER_MODELS.map((m) => characters.create(m, 0xffffff));
   for (const c of warmChars) warm.add(c.model);
-  for (const id of [MODEL_IDS.nodeTree, MODEL_IDS.bush, MODEL_IDS.tent, MODEL_IDS.tentMessy]) {
+  for (const id of [MODEL_IDS.nodeTree, MODEL_IDS.bush, MODEL_IDS.tent]) {
     warm.add(library.create(id));
   }
   {
-    // Variantes de matériaux (tente libre, tente en désordre) : programmes compilés au warm-up.
+    // Variantes de matériaux (tente libre, tente en désordre + sac de couchage) : programmes compilés au warm-up.
     const freeTent = library.create(MODEL_IDS.tent);
     setMaterials(freeTent, (b) => kit.freeTent.get(b), new Map());
     warm.add(freeTent);
-    const messy = library.create(MODEL_IDS.tentMessy);
-    setMaterials(messy, (b) => kit.messyTent.get(b), new Map());
-    warm.add(messy);
+    const closedTent = library.create(MODEL_IDS.tent);
+    setMaterials(closedTent, (b) => kit.closedTent.get(b), new Map());
+    warm.add(closedTent);
+    warm.add(createMessyTent(kit));
   }
+  // Feu : flammes, fumée et braises visibles pendant la compilation (points additifs / normaux).
+  fireView.showAllForWarmup(center.x, center.z);
   for (const { geometry, material } of proc.all()) {
     const m = new THREE.Mesh(geometry, material);
     m.frustumCulled = false;
@@ -244,11 +264,15 @@ async function assemble(
   });
 
   // --- Statistiques en lecture seule pour les e2e (aucun accès à l'état) ---
+  let shownLight: LightPhase | null = null;
   const info = (): Render3DInfo => ({
     calls: renderer.info.render.calls,
     triangles: renderer.info.render.triangles,
     geometries: renderer.info.memory.geometries,
     textures: renderer.info.memory.textures,
+    light: shownLight,
+    shadow: stage.shadowOwner(),
+    fireLit: fireView.isLit(),
   });
   const w = window as unknown as { __render3d?: { info(): Render3DInfo } };
   w.__render3d = Object.freeze({ info });
@@ -275,6 +299,8 @@ async function assemble(
   function playerActionOf(frame: SceneFrame): FrameContext["playerAction"] {
     for (const it of frame.items) {
       if ((it.type === "tree" || it.type === "bush") && it.targeted) return "harvest";
+      // Verser du bois au feu : même geste (Use_Item) que la récolte.
+      if (it.type === "fire" && it.feeding) return "harvest";
     }
     return frame.welcome.active && frame.welcome.ratio > 0 ? "welcome" : null;
   }
@@ -304,6 +330,9 @@ async function assemble(
     fx.reset();
     loot.hideAll();
     overlay.clear();
+    fireView.reset();
+    // Chargement possible en pleine nuit : la carte d'ombre active date d'une autre partie.
+    stage.refreshShadows();
     snapCamera = true;
     firstFrame = true;
   }
@@ -336,10 +365,24 @@ async function assemble(
       ctx.playerAction = playerActionOf(frame);
       ctx.live = !firstFrame;
 
+      // Feu (vue unique) puis éclairage : jour/nuit, lumières du feu et du joueur, bascule des ombres.
+      let fireLight: ReturnType<FireView["update"]> | null = null;
+      for (const it of frame.items) {
+        if (it.type === "fire") {
+          fireLight = fireView.update(it, ctx);
+          break;
+        }
+      }
+      fireView.object.visible = fireLight !== null;
+      stage.setLighting(frame.lighting, { fire: fireLight, player: frame.focus });
+      library.setDaylight(frame.lighting.daylight);
+      shownLight = frame.lighting.phase;
+
       berries.begin();
       reconciler.sync(frame, ctx);
       berries.end();
       layer.setWelcomeActive(frame.welcome.active);
+      layer.setNightWeight(1 - frame.lighting.sunWeight);
       const pulse = 0.55 + 0.4 * Math.sin((now / 1000) * ANIM.pulseHz * Math.PI * 2);
       proc.tentFrame.assigned.opacity = pulse;
 
@@ -349,12 +392,12 @@ async function assemble(
       fx.sample(now, playerUnits, samples);
       loot.update(samples, now);
 
-      stage.follow(frame.focus, ctx.dt, snapCamera);
+      stage.follow(frame.focus, ctx.dt, snapCamera, frame.framing);
       snapCamera = false;
       firstFrame = false;
       renderer.render(scene, camera);
 
-      overlay.draw(frame, samples, camera, welcomeDecal);
+      overlay.draw(frame, samples, camera, welcomeDecal, now);
     },
 
     reset,

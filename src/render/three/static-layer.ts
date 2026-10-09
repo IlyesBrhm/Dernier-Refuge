@@ -16,6 +16,12 @@ export interface StaticLayer {
   readonly layout: StaticLayout;
   /** Tapis d'accueil plus lumineux quand le joueur est dessus. */
   setWelcomeActive(active: boolean): void;
+  /**
+   * Poids de nuit dans [0, 1] (1 − Lighting.sunWeight) : correction des rochers, qui renvoient
+   * presque toute la lumière bleue de la nuit (gris clair) et ressortaient en bleu saturé.
+   * Uniformes seulement (couleur, émission) : aucun changement de programme.
+   */
+  setNightWeight(weight: number): void;
   dispose(): void;
 }
 
@@ -25,32 +31,82 @@ const tmpQ = new THREE.Quaternion();
 const tmpS = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
-/** Sol : 2 triangles par tuile (couleur franche par tuile) + grand anneau de sous-bois uni. */
+/** Segments du disque de terre du feu (multiple de 8 : les coins de la tuile sont des sommets). */
+const FIRE_DISC_SEGMENTS = 16;
+/** Anneaux du disque (fraction de tuile) : cendres au centre → terre → fondu dans l'herbe. */
+const FIRE_DISC_RINGS = { earth: 0.2, earthEdge: 0.36, blend: 0.46 } as const;
+
+/**
+ * Sol : 2 triangles par tuile (couleur franche par tuile) + grand anneau de sous-bois uni. La tuile
+ * du feu est un disque de cendres / terre sombre fondu dans l'herbe (couleurs par sommet interpolées).
+ */
 function groundGeometry(layout: StaticLayout): THREE.BufferGeometry {
   const T = TILE_METERS;
   const palette = [new THREE.Color(COLORS3D.grassA), new THREE.Color(COLORS3D.grassB), new THREE.Color(COLORS3D.undergrowth)];
   const far = FAR_GROUND_TILES * T;
-  const quads = layout.groundTiles.length + 4;
-  const pos = new Float32Array(quads * 6 * 3);
-  const col = new Float32Array(quads * 6 * 3);
-  const nor = new Float32Array(quads * 6 * 3);
-  let k = 0;
+  const pos: number[] = [];
+  const col: number[] = [];
+  const vertex = (x: number, y: number, z: number, c: THREE.Color): void => {
+    pos.push(x, y, z);
+    col.push(c.r, c.g, c.b);
+  };
   const quad = (x0: number, z0: number, x1: number, z1: number, y: number, c: THREE.Color): void => {
     // Deux triangles orientés vers +Y (sens anti-horaire vus de dessus).
     const pts = [x0, z0, x0, z1, x1, z1, x0, z0, x1, z1, x1, z0];
-    for (let i = 0; i < 6; i++) {
-      pos[k * 3] = pts[i * 2] as number;
-      pos[k * 3 + 1] = y;
-      pos[k * 3 + 2] = pts[i * 2 + 1] as number;
-      nor[k * 3 + 1] = 1;
-      col[k * 3] = c.r;
-      col[k * 3 + 1] = c.g;
-      col[k * 3 + 2] = c.b;
-      k++;
+    for (let i = 0; i < 6; i++) vertex(pts[i * 2] as number, y, pts[i * 2 + 1] as number, c);
+  };
+  const ash = new THREE.Color(COLORS3D.fireAsh);
+  const earth = new THREE.Color(COLORS3D.fireEarth);
+  /** Tuile du feu : éventail de centre (cx, cz), anneaux circulaires puis bord carré de la tuile. */
+  const fireDisc = (tx: number, ty: number, grass: THREE.Color): void => {
+    const cx = (tx + 0.5) * T;
+    const cz = (ty + 0.5) * T;
+    const blend = earth.clone().lerp(grass, 0.55);
+    // Anneaux : rayon (null = bord de la tuile) et couleur. Le centre est un point (cendres).
+    const rings: { r: number | null; c: THREE.Color }[] = [
+      { r: FIRE_DISC_RINGS.earth * T, c: earth },
+      { r: FIRE_DISC_RINGS.earthEdge * T, c: earth },
+      { r: FIRE_DISC_RINGS.blend * T, c: blend },
+      { r: null, c: grass },
+    ];
+    const n = FIRE_DISC_SEGMENTS;
+    const at = (ring: number, i: number): [number, number] => {
+      const a = (i / n) * Math.PI * 2;
+      const dx = Math.cos(a);
+      const dz = Math.sin(a);
+      const def = rings[ring] as { r: number | null };
+      // Bord carré : le rayon touche le côté de la tuile (coins inclus car n est multiple de 8).
+      const r = def.r ?? (0.5 * T) / Math.max(Math.abs(dx), Math.abs(dz));
+      return [cx + dx * r, cz + dz * r];
+    };
+    for (let i = 0; i < n; i++) {
+      // Sens anti-horaire vu de dessus (+Y) : i+1 avant i (l'angle croît vers +Z).
+      const [ax, az] = at(0, i);
+      const [bx, bz] = at(0, i + 1);
+      vertex(cx, 0, cz, ash);
+      vertex(bx, 0, bz, earth);
+      vertex(ax, 0, az, earth);
+      for (let ring = 1; ring < rings.length; ring++) {
+        const ci = (rings[ring - 1] as { c: THREE.Color }).c;
+        const co = (rings[ring] as { c: THREE.Color }).c;
+        const [p0x, p0z] = at(ring - 1, i);
+        const [p1x, p1z] = at(ring - 1, i + 1);
+        const [q0x, q0z] = at(ring, i);
+        const [q1x, q1z] = at(ring, i + 1);
+        vertex(p0x, 0, p0z, ci);
+        vertex(p1x, 0, p1z, ci);
+        vertex(q1x, 0, q1z, co);
+        vertex(p0x, 0, p0z, ci);
+        vertex(q1x, 0, q1z, co);
+        vertex(q0x, 0, q0z, co);
+      }
     }
   };
+  const f = layout.fireTile;
   for (const t of layout.groundTiles) {
-    quad(t.tx * T, t.ty * T, (t.tx + 1) * T, (t.ty + 1) * T, 0, palette[t.shade] as THREE.Color);
+    const grass = palette[t.shade] as THREE.Color;
+    if (f && f.tx === t.tx && f.ty === t.ty) fireDisc(t.tx, t.ty, grass);
+    else quad(t.tx * T, t.ty * T, (t.tx + 1) * T, (t.ty + 1) * T, 0, grass);
   }
   const b = layout.bounds;
   const under = palette[2] as THREE.Color;
@@ -59,10 +115,13 @@ function groundGeometry(layout: StaticLayout): THREE.BufferGeometry {
   quad(b.minX - far, b.maxZ, b.maxX + far, b.maxZ + far, y, under); // sud
   quad(b.minX - far, b.minZ, b.minX, b.maxZ, y, under); // ouest
   quad(b.maxX, b.minZ, b.maxX + far, b.maxZ, y, under); // est
+  const count = pos.length / 3;
+  const nor = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) nor[i * 3 + 1] = 1;
   const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(col), 3));
   g.computeBoundingSphere();
   return g;
 }
@@ -112,12 +171,14 @@ export function createStaticLayer(
     name: string,
     castShadow: boolean,
     receiveShadow: boolean,
+    material?: (m: THREE.Material | THREE.Material[]) => THREE.Material | THREE.Material[],
   ): void {
     ids.forEach((id, modelIndex) => {
       const list = placements.filter((p) => p.model === modelIndex);
       if (list.length === 0) return;
       for (const { mesh, matrix } of templateMatrices(lib, id)) {
-        const im = keep(new THREE.InstancedMesh(mesh.geometry, mesh.material, list.length));
+        const mat = material ? material(mesh.material) : mesh.material;
+        const im = keep(new THREE.InstancedMesh(mesh.geometry, mat, list.length));
         im.name = `${name}:${id}`;
         list.forEach((p, i) => {
           tmpP.set(p.x, 0, p.z);
@@ -141,7 +202,26 @@ export function createStaticLayer(
   const inside = (p: Placement): boolean => p.x >= 0 && p.z >= 0 && p.x <= mapW && p.z <= mapH;
   instanced(MODEL_IDS.borderTrees, layout.borderTrees.filter(inside), "border", true, true);
   instanced(MODEL_IDS.borderTrees, [...layout.borderTrees.filter((p) => !inside(p)), ...layout.nearForest], "forest", false, true);
-  instanced(MODEL_IDS.rocks, layout.rocks, "rocks", true, true);
+  // Rochers : matériaux CLONÉS (ceux de la bibliothèque restent intacts), émission = texture × gris
+  // neutre dès la création (emissive noir le jour) pour que la correction de nuit ne change que des
+  // uniformes. Gris clair × hémisphère bleue = bleu saturé : la nuit, une teinte chaude atténue le
+  // bleu reçu et une petite part auto-éclairée neutre ramène vers un gris-bleu discret.
+  const rockMaterials: THREE.MeshStandardMaterial[] = [];
+  const rockMaterial = (m: THREE.Material): THREE.Material => {
+    if (!(m instanceof THREE.MeshStandardMaterial)) return m;
+    const c = keep(m.clone());
+    c.emissive.setHex(0x000000);
+    if (c.map) c.emissiveMap = c.map;
+    rockMaterials.push(c);
+    return c;
+  };
+  instanced(MODEL_IDS.rocks, layout.rocks, "rocks", true, true, (m) =>
+    Array.isArray(m) ? m.map(rockMaterial) : rockMaterial(m),
+  );
+  const rockDayColor = new THREE.Color(0xffffff);
+  const rockNightColor = new THREE.Color(COLORS3D.rockNightTint);
+  const rockNightGlow = new THREE.Color(COLORS3D.rockNightSelfLit);
+  let nightWeight = -1;
   instanced(MODEL_IDS.tufts, layout.tufts, "tufts", false, true);
 
   // --- Tapis au sol ---
@@ -174,6 +254,10 @@ export function createStaticLayer(
         polygonOffset: true,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
+        // Auto-éclairage léger (emissive × texture) : le tapis garde sa teinte crème / jaune sous la
+        // lumière bleue de la nuit et le halo orangé du feu (plus de taches bleu vif / orange vif).
+        emissive: COLORS3D.decalSelfLit,
+        emissiveMap: tex,
       }),
     );
     if (d.kind === "welcome") {
@@ -201,7 +285,16 @@ export function createStaticLayer(
       if (active === welcomeActive || !welcomeMaterial) return;
       welcomeActive = active;
       welcomeMaterial.color.setHex(active ? COLORS3D.welcomeTintActive : COLORS3D.welcomeTintIdle);
-      welcomeMaterial.emissive.setHex(active ? COLORS3D.welcomeGlowActive : 0x000000);
+      welcomeMaterial.emissive.setHex(active ? COLORS3D.welcomeGlowActive : COLORS3D.decalSelfLit);
+    },
+    setNightWeight(weight) {
+      const w = Math.min(1, Math.max(0, weight));
+      if (Math.abs(w - nightWeight) < 1e-3) return;
+      nightWeight = w;
+      for (const m of rockMaterials) {
+        m.color.copy(rockDayColor).lerp(rockNightColor, w);
+        m.emissive.setRGB(0, 0, 0).lerp(rockNightGlow, w);
+      }
     },
     dispose() {
       group.removeFromParent();

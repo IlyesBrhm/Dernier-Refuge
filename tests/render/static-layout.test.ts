@@ -168,6 +168,28 @@ describe("buildStaticLayout — sol, rochers, touffes", () => {
   });
 });
 
+describe("buildStaticLayout — feu de camp (docs/design/day-night.md §4.4)", () => {
+  it("fireTile = F (9,5) ; aucune touffe, aucun rocher, aucun arbre sur F ; sol herbe A/B (teinte « terre battue » côté vue)", () => {
+    const [f] = charTiles("F");
+    expect(charTiles("F")).toHaveLength(1);
+    expect(f).toEqual({ tx: 9, ty: 5 });
+    expect(layout.fireTile).toEqual({ tx: 9, ty: 5 });
+    expect(map.tiles[9 + 5 * W]).toBe("fire");
+    const fk = key(9, 5);
+    expect(layout.tufts.map(tileOfPlacement)).not.toContain(fk);
+    expect(layout.rocks.map(tileOfPlacement)).not.toContain(fk);
+    expect(layout.borderTrees.map(tileOfPlacement)).not.toContain(fk);
+    const g = layout.groundTiles.find((t) => t.tx === 9 && t.ty === 5);
+    expect(g?.shade).toBe((9 + 5) & 1);
+  });
+
+  it("carte sans feu (ancienne carte de test) ⇒ fireTile null, sans exception", () => {
+    const { fire: _f, ...rest } = structuredClone(map);
+    const noFire = rest as unknown as MapState;
+    expect(buildStaticLayout(noFire).fireTile).toBeNull();
+  });
+});
+
 describe("buildStaticLayout — décalques", () => {
   it("accueil 1×1 sur W, file 5×1 sur Q, entrée 1×4 (E + 3 tuiles de chemin)", () => {
     const byKind = (k: string) => layout.decals.filter((d) => d.kind === k);

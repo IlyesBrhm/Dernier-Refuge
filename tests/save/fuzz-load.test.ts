@@ -25,6 +25,7 @@ import {
   importSave,
   listQuarantine,
   loadGame,
+  migrate,
   quarantine,
   SAVE_CONFIG,
   SAVE_KEYS,
@@ -34,7 +35,9 @@ import {
   type DecodeResult,
   type LoadResult,
 } from "../../src/save/index";
-import { botStep, midgame, OWNER, SAVED_AT } from "./helpers";
+import { botStep, midgame, nightState, OWNER, SAVED_AT } from "./helpers";
+import V1_INITIAL from "./fixtures/v1-initial.json?raw";
+import V1_MIDGAME from "./fixtures/v1-midgame.json?raw";
 
 const ALL_ERRORS: ReadonlySet<DecodeError> = new Set<DecodeError>([
   "too_large",
@@ -49,8 +52,16 @@ const ALL_ERRORS: ReadonlySet<DecodeError> = new Set<DecodeError>([
   "invariants",
 ]);
 
+// Délais explicites : la préparation (4 parties de 2500 ticks + 6000 cas) tourne dans beforeAll,
+// dont le délai par défaut (10 s) peut être dépassé quand la suite complète charge la machine ; les
+// tranches (≈ 1 s seules) gardent une marge large sous charge.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
 const CASES = 6000;
+const RETOUCHES = 3000;
 const STORAGE_CASES = 1200;
+/** Taille des tranches (cas mutés) ; retouches : CHUNK / 2 ; stockages : CHUNK / 4 (plus coûteux). */
+const CHUNK = 1000;
 const TICKS_AFTER_LOAD = 100;
 
 // --- RNG du fuzz (core, seedé) ----------------------------------------------------------------
@@ -97,6 +108,10 @@ function makeBases(): Base[] {
     }
   }
   bases.push({ name: "mi-partie riche", text: encode(midgame(), 4242) });
+  // v2 de nuit (feu allumé, dormeurs) et v1 figées (chargées via la migration v1 → v2).
+  bases.push({ name: "nuit riche", text: encode(nightState(), 4242) });
+  bases.push({ name: "fixture v1-initial", text: V1_INITIAL.trim() });
+  bases.push({ name: "fixture v1-midgame", text: V1_MIDGAME.trim() });
   return bases;
 }
 
@@ -114,6 +129,7 @@ const ENUM_STRINGS = [
   "queued",
   "walkingToTent",
   "resting",
+  "sleeping",
   "leaving",
   "free",
   "assigned",
@@ -274,7 +290,7 @@ function mutateStructure(f: Fuzz, env: Record<string, Json>): string {
     case 9: {
       // Enveloppe : version, seed, savedAt.
       const k = f.pick(["version", "seed", "savedAt"]);
-      env[k] = f.pick<Json>([0, -1, 2, 3, 99, 1.5, "1", null, 2 ** 32, Number.MAX_SAFE_INTEGER, CURRENT_VERSION]);
+      env[k] = f.pick<Json>([0, -1, 1, 2, 3, 99, 1.5, "1", null, 2 ** 32, Number.MAX_SAFE_INTEGER, CURRENT_VERSION]);
       return `enveloppe ${k}`;
     }
     default: {
@@ -418,10 +434,13 @@ function checkResult(text: string, r: DecodeResult): string[] {
     const inv = checkInvariants(r.state);
     if (inv.length > 0) v.push(`ok mais invariants violés : ${inv.slice(0, 3).join("; ")}`);
     if (r.state.map !== referenceMap()) v.push("ok mais carte différente de referenceMap()");
-    // Jamais réparé : l'état chargé est exactement l'état stocké.
+    // Jamais réparé : l'état chargé est exactement l'état stocké (après la chaîne de migrations
+    // officielle s'il est d'une version antérieure).
     try {
       const stored = (JSON.parse(text) as { state: unknown }).state;
-      if (canonicalStringify(toSavedState(r.state), 64) !== canonicalStringify(stored, 64)) v.push("état chargé ≠ état stocké (réparé ?)");
+      const m = migrate(stored, r.version);
+      const expected = m.ok ? m.raw : stored;
+      if (canonicalStringify(toSavedState(r.state), 64) !== canonicalStringify(expected, 64)) v.push("état chargé ≠ état stocké (réparé ?)");
     } catch (e) {
       v.push(`ok mais texte non relisible : ${String(e)}`);
     }
@@ -473,14 +492,41 @@ describe("fuzz du chargement (déterministe, RNG seedé du core)", () => {
     expect(new Set(BASES.map((b) => b.text)).size).toBe(BASES.length);
   });
 
-  it(`${CASES} sauvegardes mutées : decodeSave et importSave ne lèvent jamais ; ok ⇒ valide et 100 ticks sûrs ; sinon refus typé`, () => {
-    const t0 = performance.now();
+  // Les trois balayages sont découpés en tranches consécutives (mêmes cas, même suite du RNG seedé,
+  // dans le même ordre : Vitest exécute les `it` d'un fichier séquentiellement) : aucun `it` ne bloque
+  // le worker plusieurs secondes. Les propriétés globales (diversité) sont vérifiées par un `it` final
+  // sur les compteurs cumulés.
+  const A_STATS: Record<string, number> = {};
+  const A_COUNTS = { resigned: 0, ok: 0, done: 0, ms: 0 };
+  for (let from = 0; from < CASES; from += CHUNK) {
+    const to = Math.min(CASES, from + CHUNK);
+    it(`sauvegardes mutées ${from}..${to - 1} / ${CASES} : decodeSave et importSave ne lèvent jamais ; ok ⇒ valide et 100 ticks sûrs ; sinon refus typé`, () => {
+      const t0 = performance.now();
+      const failures = mutatedCasesFailures(CASES_LIST.slice(from, to), A_STATS, A_COUNTS);
+      A_COUNTS.ms += performance.now() - t0;
+      A_COUNTS.done += to - from;
+      expect(failures).toEqual([]);
+    });
+  }
+
+  it(`${CASES} sauvegardes mutées — bilan : toutes traitées, > 1/3 re-signées, > 50 acceptées, chaque refus du pipeline atteint`, () => {
+    console.info(
+      `[fuzz-load] ${CASES} cas (${A_COUNTS.resigned} re-signés) en ${Math.round(A_COUNTS.ms)} ms ; résultats : ${JSON.stringify(A_STATS)}`,
+    );
+    expect(A_COUNTS.done).toBe(CASES);
+    expect(A_COUNTS.resigned).toBeGreaterThan(CASES / 3);
+    // Diversité : chaque étape du pipeline est atteinte, et des sauvegardes trafiquées passent quand même.
+    expect(A_COUNTS.ok).toBeGreaterThan(50);
+    for (const e of ["too_large", "empty", "not_json", "bad_envelope", "unsupported_version", "future_version", "bad_checksum", "bad_shape", "invariants"]) {
+      expect(A_STATS[e] ?? 0, e).toBeGreaterThan(0);
+    }
+  });
+
+  /** Une tranche de cas mutés ; cumule les compteurs ; renvoie les violations (≤ ~20). */
+  function mutatedCasesFailures(cases: readonly Case[], stats: Record<string, number>, counts: { resigned: number; ok: number }): string[] {
     const failures: string[] = [];
-    const stats: Record<string, number> = {};
-    let resignedCases = 0;
-    let okCases = 0;
-    for (const c of CASES_LIST) {
-      if (c.resigned) resignedCases++;
+    for (const c of cases) {
+      if (c.resigned) counts.resigned++;
       let r: DecodeResult;
       let r2: DecodeResult;
       try {
@@ -496,31 +542,41 @@ describe("fuzz du chargement (déterministe, RNG seedé du core)", () => {
       // L'import suit exactement le même pipeline (même limite de taille par défaut).
       if (r.ok !== r2.ok || (!r.ok && !r2.ok && r.error !== r2.error)) failures.push(`import ≠ decode ${short(c)}`);
       if (r.ok) {
-        okCases++;
+        counts.ok++;
         for (const v of tickHundred(r.state)) failures.push(`${v} ${short(c)}`);
       }
       if (failures.length > 20) break;
     }
-    const ms = performance.now() - t0;
-    console.info(
-      `[fuzz-load] ${CASES} cas (${resignedCases} re-signés) en ${Math.round(ms)} ms ; résultats : ${JSON.stringify(stats)}`,
-    );
-    expect(failures).toEqual([]);
-    expect(resignedCases).toBeGreaterThan(CASES / 3);
-    // Diversité : chaque étape du pipeline est atteinte, et des sauvegardes trafiquées passent quand même.
-    expect(okCases).toBeGreaterThan(50);
-    for (const e of ["too_large", "empty", "not_json", "bad_envelope", "unsupported_version", "future_version", "bad_checksum", "bad_shape", "invariants"]) {
-      expect(stats[e] ?? 0, e).toBeGreaterThan(0);
-    }
-  }, 60_000);
+    return failures;
+  }
 
-  it("3000 petites retouches numériques re-signées (±1, 0, voisins) : ok ⇒ 100 ticks sûrs et valides", () => {
-    // Ces retouches « plausibles » passent souvent la forme et parfois les invariants : c'est le cas
-    // le plus dangereux (un état accepté que tick() ne saurait pas gérer).
-    const f = new Fuzz(0xc0ffee);
+  // Ces retouches « plausibles » passent souvent la forme et parfois les invariants : c'est le cas
+  // le plus dangereux (un état accepté que tick() ne saurait pas gérer). Un seul RNG pour toutes les
+  // tranches : la suite de cas est exactement celle d'une boucle unique de RETOUCHES cas.
+  const fB = new Fuzz(0xc0ffee);
+  const B_STATS: Record<string, number> = {};
+  let bDone = 0;
+  for (let from = 0; from < RETOUCHES; from += CHUNK / 2) {
+    const to = Math.min(RETOUCHES, from + CHUNK / 2);
+    it(`petites retouches numériques re-signées ${from}..${to - 1} / ${RETOUCHES} (±1, 0, voisins) : ok ⇒ 100 ticks sûrs et valides`, () => {
+      expect(bDone).toBe(from); // tranches dans l'ordre
+      const failures = retouchFailures(from, to);
+      bDone = to;
+      expect(failures).toEqual([]);
+    });
+  }
+
+  it(`${RETOUCHES} retouches numériques — bilan : toutes traitées, > 300 acceptées`, () => {
+    console.info(`[fuzz-load] retouches numériques : ${JSON.stringify(B_STATS)}`);
+    expect(bDone).toBe(RETOUCHES);
+    expect(B_STATS.ok ?? 0).toBeGreaterThan(300);
+  });
+
+  function retouchFailures(from: number, to: number): string[] {
+    const f = fB;
+    const stats = B_STATS;
     const failures: string[] = [];
-    const stats: Record<string, number> = {};
-    for (let n = 0; n < 3000 && failures.length <= 20; n++) {
+    for (let n = from; n < to && failures.length <= 20; n++) {
       const base = f.pick(BASES);
       const env = JSON.parse(base.text) as Record<string, Json>;
       const nums = slotsOf(env.state).filter((sl) => typeof get(sl) === "number");
@@ -543,10 +599,8 @@ describe("fuzz du chargement (déterministe, RNG seedé du core)", () => {
       for (const v of checkResult(text, r)) failures.push(`${v} cas ${n}`);
       if (r.ok) for (const v of tickHundred(r.state)) failures.push(`${v} cas ${n} (${base.name})`);
     }
-    console.info(`[fuzz-load] retouches numériques : ${JSON.stringify(stats)}`);
-    expect(failures).toEqual([]);
-    expect(stats.ok ?? 0).toBeGreaterThan(300);
-  }, 60_000);
+    return failures;
+  }
 
   it("décodage déterministe : même texte ⇒ même résultat (échantillon)", () => {
     for (const c of CASES_LIST.slice(0, 300)) {
@@ -556,11 +610,31 @@ describe("fuzz du chargement (déterministe, RNG seedé du core)", () => {
     }
   });
 
-  it(`${STORAGE_CASES} stockages aux deux slots mutés : loadGame ne lève pas, n'écrit rien, résultat cohérent ; quarantaine puis écriture OK`, () => {
-    const f = new Fuzz(0xa11ce);
+  // Même découpage : un seul RNG, tranches consécutives, bilan final sur les compteurs cumulés.
+  const fC = new Fuzz(0xa11ce);
+  const C_KINDS: Record<string, number> = {};
+  let cDone = 0;
+  for (let from = 0; from < STORAGE_CASES; from += CHUNK / 4) {
+    const to = Math.min(STORAGE_CASES, from + CHUNK / 4);
+    it(`stockages aux deux slots mutés ${from}..${to - 1} / ${STORAGE_CASES} : loadGame ne lève pas, n'écrit rien, résultat cohérent ; quarantaine puis écriture OK`, () => {
+      expect(cDone).toBe(from); // tranches dans l'ordre
+      const failures = storageFailures(from, to);
+      cDone = to;
+      expect(failures).toEqual([]);
+    });
+  }
+
+  it(`${STORAGE_CASES} stockages mutés — bilan : tous traités ; loaded, corrupt, future et fresh atteints`, () => {
+    console.info(`[fuzz-load] ${STORAGE_CASES} stockages : ${JSON.stringify(C_KINDS)}`);
+    expect(cDone).toBe(STORAGE_CASES);
+    for (const k of ["loaded", "corrupt", "future", "fresh"]) expect(C_KINDS[k] ?? 0, k).toBeGreaterThan(0);
+  });
+
+  function storageFailures(from: number, to: number): string[] {
+    const f = fC;
     const failures: string[] = [];
-    const kinds: Record<string, number> = {};
-    for (let n = 0; n < STORAGE_CASES && failures.length <= 20; n++) {
+    const kinds = C_KINDS;
+    for (let n = from; n < to && failures.length <= 20; n++) {
       const st = createMemoryStorage();
       const slotText = (): string | null => {
         const r = f.float();
@@ -655,8 +729,6 @@ describe("fuzz du chargement (déterministe, RNG seedé du core)", () => {
         failures.push(`relecture après écriture : ${again.kind} ${tag}`);
       }
     }
-    console.info(`[fuzz-load] ${STORAGE_CASES} stockages : ${JSON.stringify(kinds)}`);
-    expect(failures).toEqual([]);
-    for (const k of ["loaded", "corrupt", "future", "fresh"]) expect(kinds[k] ?? 0, k).toBeGreaterThan(0);
-  }, 60_000);
+    return failures;
+  }
 });

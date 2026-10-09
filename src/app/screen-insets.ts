@@ -15,6 +15,8 @@ export function watchScreenInsets(
   hud: HTMLElement,
   menuRoot: HTMLElement,
   apply: (insets: ScreenInsets) => void,
+  /** Autres éléments DOM à exclure quand ils sont visibles (ex. bilan de l'aube). */
+  extra: readonly HTMLElement[] = [],
 ): ScreenInsetsWatcher {
   let raf = 0;
 
@@ -31,6 +33,10 @@ export function watchScreenInsets(
     const toggle = menuRoot.querySelector<HTMLElement>(".menu-toggle");
     if (toggle) {
       const r = toggle.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) exclude.push(rel(r));
+    }
+    for (const el of extra) {
+      const r = el.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) exclude.push(rel(r));
     }
     apply({ safeTopPx: hudBottom(base), exclude });
@@ -59,6 +65,8 @@ export function watchScreenInsets(
   const ro = new ResizeObserver(schedule);
   ro.observe(canvas);
   ro.observe(hud);
+  // Apparition / disparition (hidden) d'un élément observé = changement de taille signalé.
+  for (const el of extra) ro.observe(el);
   window.addEventListener("resize", schedule);
   measure();
 

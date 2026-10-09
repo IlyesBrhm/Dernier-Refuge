@@ -13,6 +13,11 @@
 // - L'état en mémoire peut être modifié depuis la console : la sauvegarde ne protège que le stockage.
 // - Pas de progression hors ligne ni de détection d'horloge (hors périmètre v1) : `savedAt` est
 //   informatif, le chargement n'appelle jamais tick(). Changer l'horloge ne rapporte donc rien.
+// - v2 (jour/nuit) : la phase jour/nuit se déduit de `tick` (aucune horloge réelle) ; le feu et le bilan
+//   de nuit sont bornés par les invariants (feu ≤ capacité, burnedTotal ≤ combustions possibles, bilan
+//   cohérent avec l'heure). Gonfler `tick` reste la limite principale : ces bornes croissent aussi avec lui.
+// - Migration v1 → v2 : n'ajoute que le feu plein + bilan à 0, endort les `resting` d'une v1 tombant la
+//   nuit et écarte joueur/survivants de la nouvelle tuile F ; une v1 mal formée ou incohérente est refusée.
 // - Seule une vérification serveur (rejouer le journal des commandes sur le core déterministe) rendrait
 //   la triche réellement impossible ; l'architecture le permet, hors périmètre v1.
 
@@ -68,7 +73,8 @@ export {
 } from "./boot";
 export { canonicalStringify, CanonicalError } from "./canonical";
 export { hash64 } from "./hash";
-export { validateSavedStateV1, type SavedStateV1 } from "./schema";
+export { validateSavedState, validateSavedStateV1, type SavedState, type SavedStateV1 } from "./schema";
+export { migrateV1toV2 } from "./migrate-v1";
 export {
   computeChecksum,
   decodeSave,

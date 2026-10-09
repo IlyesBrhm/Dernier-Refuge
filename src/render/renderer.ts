@@ -1,11 +1,20 @@
-// Rendu Canvas 2D provisoire (formes simples). LECTURE SEULE : ne modifie jamais l'état.
+// Rendu Canvas 2D (`?render=2d` et repli automatique de la 3D). LECTURE SEULE : ne modifie jamais l'état.
 // Caméra : la carte est centrée si elle tient à l'écran ; sinon (petit écran / mobile, taille
 // de tuile minimale pour rester lisible) la caméra suit le joueur, bornée aux limites de la carte.
+// Jour/nuit (docs/design/day-night.md §4.9) : même courbe `lightingAt` que la 3D ; la nuit, voile
+// bleuté percé d'un halo autour du feu (∝ bois restant) et du joueur, collé AVANT barres et textes.
 
 import {
+  feedZone,
+  fireRatio,
   harvestTarget,
+  isFireLit,
+  isFireLow,
   isPlayerOn,
+  playerTile,
+  sameTile,
   slotRemaining,
+  welcomeBlockReason,
   type GameState,
   type ResourceNode,
   type Survivor,
@@ -17,11 +26,13 @@ import {
 } from "../core";
 import { SURVIVOR, TENT, WELCOME, WORLD, PLAYER } from "../data/balance";
 import { drawBar, drawLabel, fontFor } from "./canvas-kit";
-import { createFxLayer, type FxView } from "./fx";
+import { fireFlicker, lightingAt, stepLitFade } from "./daylight";
+import { createFxLayer, FX_TEXT_COLORS, type FxView } from "./fx";
 import { drawResourceIcon } from "./icons";
 import { interpolate } from "./interpolate";
-import { prevNodeOf, shownHarvestRatio, shownRegrowRatio } from "./ratios";
+import { prevNodeOf, shownFeedRatio, shownHarvestRatio, shownRegrowRatio } from "./ratios";
 import { BERRIES } from "./shapes";
+import { welcomeBlockLines } from "./welcome-block";
 
 const U = WORLD.unitsPerTile;
 const MIN_TILE_PX = 44; // en px CSS : lisibilité au doigt sur mobile
@@ -83,8 +94,22 @@ const SURVIVOR_COLORS: Record<SurvivorStatus, string> = {
   queued: "#e67e22",
   walkingToTent: "#f7c948",
   resting: "#d35400",
+  sleeping: "#8e6fbf",
   leaving: "#9aa3a8",
 };
+
+const FIRE_COLORS = {
+  dirt: "#8a6a45",
+  stone: "#8e9196",
+  stoneDark: "#5f6266",
+  log: "#7a4a22",
+  flameOuter: "#ff7a1a",
+  flameInner: "#ffd23f",
+  ember: "#5a4a44",
+  bar: "#ff9a3c",
+  barLow: "#e53935",
+  barOut: "#8a8a8a",
+} as const;
 
 /** Décalage horizontal (fraction de tuile) quand bois et nourriture partagent une tuile. */
 export const SHARED_DROP_OFFSET = 0.15;
@@ -211,7 +236,13 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         } else {
           ctx.fillStyle = (tx + ty) % 2 === 0 ? COLORS.grassA : COLORS.grassB;
           ctx.fillRect(x, y, tilePx + 0.5, tilePx + 0.5);
-          if (tile === "rock") {
+          if (tile === "fire") {
+            // Terre battue autour du foyer.
+            ctx.fillStyle = FIRE_COLORS.dirt;
+            ctx.beginPath();
+            ctx.arc(x + tilePx / 2, y + tilePx / 2, tilePx * 0.46, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (tile === "rock") {
             ctx.fillStyle = COLORS.rockDark;
             roundRect(x + tilePx * 0.08, y + tilePx * 0.12, tilePx * 0.84, tilePx * 0.8, tilePx * 0.2);
             ctx.fill();
@@ -240,7 +271,6 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     const e = map.entrance;
     ctx.fillStyle = COLORS.entrance;
     ctx.fillRect(tileX(e), tileY(e), tilePx, tilePx);
-    label("Entrée", tileX(e) + tilePx / 2, tileY(e) + tilePx / 2, 0.2);
 
     // Places de file (tête = 1)
     ctx.save();
@@ -266,7 +296,78 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     ctx.strokeStyle = "#fff3b0";
     ctx.lineWidth = Math.max(1.5, tilePx * 0.05);
     ctx.strokeRect(tileX(w) + 1, tileY(w) + 1, tilePx - 2, tilePx - 2);
+  }
+
+  /** Libellés des zones (après le voile de nuit : toujours lisibles). */
+  function drawZoneLabels(state: Readonly<GameState>): void {
+    const { map } = state;
+    const e = map.entrance;
+    label("Entrée", tileX(e) + tilePx / 2, tileY(e) + tilePx / 2, 0.2);
+    const w = map.welcome;
     label("Accueil", tileX(w) + tilePx / 2, tileY(w) + tilePx * 0.3, 0.2);
+    const lines = welcomeBlockLines(welcomeBlockReason(state as GameState));
+    if (lines.length > 0) {
+      // Accueil fermé (core : welcomeBlockReason) : feu éteint, ou froid ayant fait fuir des survivants.
+      ctx.font = font(0.18);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = Math.max(2, tilePx * 0.06);
+      ctx.strokeStyle = FX_TEXT_COLORS.stroke;
+      ctx.fillStyle = FX_TEXT_COLORS.cold;
+      const cx = tileX(w) + tilePx / 2;
+      const lineH = tilePx * 0.2;
+      const cy0 = tileY(w) + tilePx * 0.65 - ((lines.length - 1) * lineH) / 2;
+      lines.forEach((t, i) => {
+        ctx.strokeText(t, cx, cy0 + i * lineH);
+        ctx.fillText(t, cx, cy0 + i * lineH);
+      });
+    }
+  }
+
+  /** Feu de camp : anneau de pierres, bûches, flamme ∝ bois restant (vacillement) ou braises grises. */
+  function drawFire(state: Readonly<GameState>, ratio: number, fade: number, nowMs: number): void {
+    const f = state.map.fire;
+    const x = tileX(f);
+    const y = tileY(f);
+    if (x > cssW || y > cssH || x + tilePx < 0 || y + tilePx < 0) return;
+    const cx = x + tilePx / 2;
+    const cy = y + tilePx / 2;
+    ctx.lineWidth = Math.max(1, tilePx * 0.03);
+    // Pierres.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      circle(cx + Math.cos(a) * tilePx * 0.3, cy + Math.sin(a) * tilePx * 0.26, tilePx * 0.08, COLORS.rock, COLORS.rockDark);
+    }
+    // Bûches croisées.
+    ctx.strokeStyle = FIRE_COLORS.log;
+    ctx.lineWidth = Math.max(2, tilePx * 0.08);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - tilePx * 0.18, cy + tilePx * 0.1);
+    ctx.lineTo(cx + tilePx * 0.18, cy - tilePx * 0.06);
+    ctx.moveTo(cx - tilePx * 0.18, cy - tilePx * 0.06);
+    ctx.lineTo(cx + tilePx * 0.18, cy + tilePx * 0.1);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+    if (fade > 0.01) {
+      const flick = fireFlicker(nowMs);
+      const r = tilePx * (0.1 + 0.22 * ratio) * flick;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = FIRE_COLORS.flameOuter;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 1.9);
+      ctx.quadraticCurveTo(cx + r, cy - r * 0.2, cx, cy + r * 0.4);
+      ctx.quadraticCurveTo(cx - r, cy - r * 0.2, cx, cy - r * 1.9);
+      ctx.fill();
+      circle(cx, cy - r * 0.2, r * 0.45, FIRE_COLORS.flameInner);
+      ctx.globalAlpha = 1;
+    }
+    if (fade < 0.99) {
+      ctx.globalAlpha = 1 - fade;
+      circle(cx, cy, tilePx * 0.1, FIRE_COLORS.ember);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawSlots(state: Readonly<GameState>): void {
@@ -283,13 +384,21 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       ctx.strokeStyle = COLORS.slotStroke;
       ctx.strokeRect(x + inset, y + inset, tilePx - 2 * inset, tilePx - 2 * inset);
       ctx.restore();
+    }
+  }
+
+  function drawSlotLabels(state: Readonly<GameState>): void {
+    for (const slot of state.buildSlots) {
+      if (slot.builtTentId !== null) continue;
+      const x = tileX(slot.tile);
+      const y = tileY(slot.tile);
       label(String(slotRemaining(slot)), x + tilePx / 2, y + tilePx * 0.4, 0.32);
       label("bois", x + tilePx / 2, y + tilePx * 0.64, 0.17);
       bar(x + tilePx / 2, y + tilePx * 0.78, slot.cost > 0 ? slot.paid / slot.cost : 0, "#f0b43c", 0.76);
     }
   }
 
-  function drawTent(state: Readonly<GameState>, tent: Readonly<Tent>): void {
+  function drawTent(tent: Readonly<Tent>): void {
     const cx = tileX(tent.tile) + tilePx / 2;
     const cy = tileY(tent.tile) + tilePx / 2;
     const half = tilePx * 0.4;
@@ -311,11 +420,24 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     ctx.lineTo(cx - tilePx * 0.12, cy + tilePx * 0.3);
     ctx.closePath();
     ctx.fill();
+  }
 
+  /** « ! » + barre de nettoyage (désordre), « Zz » (dormeur) : après le voile de nuit. */
+  function drawTentLabels(state: Readonly<GameState>, tent: Readonly<Tent>, nowMs: number): void {
+    const cx = tileX(tent.tile) + tilePx / 2;
+    const cy = tileY(tent.tile) + tilePx / 2;
     if (tent.status === "messy") {
       label("!", cx, cy - tilePx * 0.08, 0.32);
-      const highlight = isPlayerOn(state,tent.tile);
+      const highlight = isPlayerOn(state, tent.tile);
       bar(cx, tileY(tent.tile) + tilePx * 0.84, tent.cleanProgress / TENT.cleanTicks, highlight ? "#7ee081" : "#57b45a");
+    } else if (tent.status === "occupied" && tent.occupantId !== null) {
+      const occupant = state.survivors.find((s) => s.id === tent.occupantId);
+      if (occupant?.status === "sleeping") {
+        const k = ((nowMs / 1000) * 0.6) % 1;
+        ctx.globalAlpha = 0.55 + 0.45 * Math.sin(Math.PI * k);
+        label("Zz", cx + tilePx * 0.22, cy - tilePx * (0.45 + 0.18 * k), 0.26);
+        ctx.globalAlpha = 1;
+      }
     }
   }
 
@@ -442,7 +564,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     }
   }
 
-  function drawDrops(state: Readonly<GameState>, positions: Map<number, Vec>): void {
+  /** `labels` : false = icônes (sous le voile de nuit), true = montants (au-dessus). */
+  function drawDrops(state: Readonly<GameState>, positions: Map<number, Vec>, labels: boolean): void {
     const size = tilePx * 0.3;
     const drops = state.drops;
     for (let i = 0; i < drops.length; i++) {
@@ -464,15 +587,19 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       const dx = shared ? (d.resource === "food" ? 1 : -1) * SHARED_DROP_OFFSET * tilePx : 0;
       const x = sx(p.x) + dx;
       const y = sy(p.y);
-      drawResourceIcon(ctx, d.resource, x, y, size, Math.max(1, tilePx * 0.03));
-      label(`+${d.amount}`, x, y - size, 0.22);
+      if (labels) label(`+${d.amount}`, x, y - size, 0.22);
+      else drawResourceIcon(ctx, d.resource, x, y, size, Math.max(1, tilePx * 0.03));
     }
+  }
+
+  function isInTent(s: Readonly<Survivor>): boolean {
+    return s.status === "resting" || s.status === "sleeping";
   }
 
   function drawSurvivor(s: Readonly<Survivor>, p: Vec): void {
     const x = sx(p.x);
     const y = sy(p.y);
-    const r = tilePx * (s.status === "resting" ? 0.16 : 0.24);
+    const r = tilePx * (isInTent(s) ? 0.16 : 0.24);
     ctx.fillStyle = SURVIVOR_COLORS[s.status];
     ctx.strokeStyle = COLORS.outline;
     ctx.lineWidth = Math.max(1, tilePx * 0.03);
@@ -480,9 +607,17 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+  }
+
+  /** Barre de repos (jour) ou « z » (dormeur) : après le voile de nuit. */
+  function drawSurvivorLabel(s: Readonly<Survivor>, p: Vec): void {
+    const x = sx(p.x);
+    const y = sy(p.y);
     if (s.status === "resting") {
       const done = 1 - s.restTicksLeft / SURVIVOR.restTicks;
       bar(x, y - tilePx * 0.52, done, "#5dade2", 0.6);
+    } else if (s.status === "sleeping") {
+      label("z", x, y, 0.2);
     }
   }
 
@@ -503,6 +638,72 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     ctx.stroke();
   }
 
+  // --- Voile de nuit : calque hors écran, halos percés au feu et au joueur ---
+  const veil = document.createElement("canvas");
+  const vctx = veil.getContext("2d");
+  let litFade = -1;
+  let lastNow: number | null = null;
+
+  function punch(x: number, y: number, radius: number): void {
+    if (!vctx || radius <= 0) return;
+    const g = vctx.createRadialGradient(x, y, 0, x, y, radius);
+    g.addColorStop(0, "rgba(0,0,0,1)");
+    g.addColorStop(0.55, "rgba(0,0,0,0.75)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    vctx.fillStyle = g;
+    vctx.beginPath();
+    vctx.arc(x, y, radius, 0, Math.PI * 2);
+    vctx.fill();
+  }
+
+  function drawNight(state: Readonly<GameState>, opacity: number, ratio: number, fade: number, player: Vec, nowMs: number): void {
+    if (!vctx || opacity <= 0.001) return;
+    if (veil.width !== canvas.width || veil.height !== canvas.height) {
+      veil.width = canvas.width;
+      veil.height = canvas.height;
+    }
+    vctx.setTransform(1, 0, 0, 1, 0, 0);
+    vctx.globalCompositeOperation = "source-over";
+    vctx.clearRect(0, 0, veil.width, veil.height);
+    vctx.fillStyle = `rgba(10, 18, 48, ${opacity.toFixed(3)})`;
+    vctx.fillRect(0, 0, veil.width, veil.height);
+    vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    vctx.globalCompositeOperation = "destination-out";
+    const f = state.map.fire;
+    const fireR = tilePx * (1.5 + (4 - 1.5) * ratio) * fade * (fade > 0 ? fireFlicker(nowMs) : 1);
+    punch(tileX(f) + tilePx / 2, tileY(f) + tilePx / 2, fireR);
+    punch(sx(player.x), sy(player.y), tilePx * 0.8 * 1.6);
+    vctx.globalCompositeOperation = "source-over";
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(veil, 0, 0);
+    ctx.restore();
+    // Lueur chaude par-dessus (feu allumé uniquement).
+    if (fade > 0.01) {
+      const cx = tileX(f) + tilePx / 2;
+      const cy = tileY(f) + tilePx / 2;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, fireR);
+      g.addColorStop(0, `rgba(255, 150, 60, ${(0.28 * fade * opacity).toFixed(3)})`);
+      g.addColorStop(1, "rgba(255, 150, 60, 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, fireR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** Barre du feu : joueur dans la zone d'alimentation, ou feu qui faiblit. */
+  function drawFireBar(state: Readonly<GameState>, ratio: number): void {
+    const low = isFireLow(state as GameState);
+    const pt = playerTile(state as GameState);
+    const near = feedZone(state.map as GameState["map"]).some((t) => sameTile(t, pt));
+    if (!near && !low) return;
+    const f = state.map.fire;
+    const lit = isFireLit(state as GameState);
+    const color = !lit ? FIRE_COLORS.barOut : low ? FIRE_COLORS.barLow : FIRE_COLORS.bar;
+    bar(tileX(f) + tilePx / 2, tileY(f) - tilePx * 0.1, ratio, color);
+  }
+
   return {
     onTick(prev, curr): void {
       fx.onTick(prev, curr, performance.now());
@@ -510,14 +711,26 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
     reset(): void {
       fx.reset();
+      litFade = -1;
+      lastNow = null;
     },
 
     draw(prev, curr, alpha): void {
       resizeIfNeeded();
+      const now = performance.now();
+      const dt = lastNow === null ? 0 : Math.min(0.1, (now - lastNow) / 1000);
+      lastNow = now;
       const a = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
       const pos = interpolate(prev, curr, a);
       const target = harvestTarget(curr);
       updateCamera(curr, pos.player);
+
+      // Feu et lumière (mêmes courbes que la 3D, temps interpolé).
+      const lit = isFireLit(curr);
+      litFade = litFade < 0 ? (lit ? 1 : 0) : stepLitFade(litFade, lit, dt);
+      const r0 = fireRatio(prev);
+      const ratio = r0 + (fireRatio(curr) - r0) * a;
+      const lighting = lightingAt(prev.tick + (curr.tick > prev.tick ? (curr.tick - prev.tick) * a : a));
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = COLORS.background;
@@ -526,22 +739,38 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       drawGround(curr);
       drawZones(curr);
       drawSlots(curr);
-      for (const t of curr.tents) drawTent(curr, t);
+      for (const t of curr.tents) drawTent(t);
+      drawFire(curr, ratio, litFade, now);
       drawNodes(prev, curr, a, target);
-      drawDrops(curr, pos.drops);
-      // Survivants au repos d'abord (sous les autres), puis les autres.
-      for (const s of curr.survivors) if (s.status === "resting") drawSurvivor(s, pos.survivors.get(s.id) ?? s.pos);
-      for (const s of curr.survivors) if (s.status !== "resting") drawSurvivor(s, pos.survivors.get(s.id) ?? s.pos);
+      drawDrops(curr, pos.drops, false);
+      // Survivants dans leur tente d'abord (sous les autres), puis les autres.
+      for (const s of curr.survivors) if (isInTent(s)) drawSurvivor(s, pos.survivors.get(s.id) ?? s.pos);
+      for (const s of curr.survivors) if (!isInTent(s)) drawSurvivor(s, pos.survivors.get(s.id) ?? s.pos);
       drawPlayer(pos.player);
 
+      // Nuit : voile + halos, sous les barres et les textes.
+      drawNight(curr, lighting.overlay2D, ratio, litFade, pos.player, now);
+
+      drawZoneLabels(curr);
+      drawSlotLabels(curr);
+      for (const t of curr.tents) drawTentLabels(curr, t, now);
+      for (const s of curr.survivors) if (isInTent(s)) drawSurvivorLabel(s, pos.survivors.get(s.id) ?? s.pos);
+      drawDrops(curr, pos.drops, true);
       // Barre d'accueil par-dessus le joueur pour rester visible.
       if (curr.welcomeProgress > 0) {
         const w = curr.map.welcome;
         bar(tileX(w) + tilePx / 2, tileY(w) + tilePx * 0.84, curr.welcomeProgress / WELCOME.ticks, "#ffd23f");
       }
       drawNodeBars(prev, curr, a, target);
+      drawFireBar(curr, ratio);
+      // Jauge d'arrêt près du feu (délai avant alimentation), en bas de la tuile du feu.
+      const feed = shownFeedRatio(prev, curr, a);
+      if (feed !== null) {
+        const f = curr.map.fire;
+        bar(tileX(f) + tilePx / 2, tileY(f) + tilePx * 0.9, Math.min(1, Math.max(0, feed)), "#ffd23f", 0.6);
+      }
       // Effets (butin en vol, texte flottant) au-dessus de tout.
-      fx.draw(ctx, fxView, pos.player, performance.now());
+      fx.draw(ctx, fxView, pos.player, now);
     },
   };
 }

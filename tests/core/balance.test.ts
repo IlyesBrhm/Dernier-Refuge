@@ -4,6 +4,8 @@
 import * as balance from "../../src/data/balance";
 import {
   BUILD,
+  COLD,
+  FIRE,
   HARVEST,
   LIMITS,
   LOOP,
@@ -16,6 +18,7 @@ import {
   QUEUE,
   RESOURCES,
   SEASONS,
+  SLEEP,
   STARTING_RESOURCES,
   SURVIVOR,
   TENT,
@@ -171,9 +174,11 @@ describe("balance — plausibilité (anti-triche, docs/design/save.md §5)", () 
   const harvestRate = (res: "wood" | "food"): number =>
     Math.max(0, ...Object.values(NODES).filter((n) => n.resource === res).map((n) => n.yield / n.harvestTicks));
   const tentCount = (MAP_LAYOUT.join("").split("T").length - 1) + BUILD.slotCosts.length;
+  // Récompense maximale d'un départ : paiement de l'aube (woodReward + dawnBonus) ≥ fin de repos ≥ froid.
+  const maxReward = SURVIVOR.woodReward + SLEEP.dawnBonus;
   const survivorRate = Math.min(
-    SURVIVOR.woodReward / SURVIVOR.spawnIntervalMin,
-    (tentCount * SURVIVOR.woodReward) / SURVIVOR.restTicks,
+    maxReward / SURVIVOR.spawnIntervalMin,
+    (tentCount * maxReward) / SURVIVOR.restTicks,
   );
   const MARGIN = 2;
 
@@ -214,7 +219,7 @@ describe("balance — plausibilité (anti-triche, docs/design/save.md §5)", () 
 });
 
 describe("balance — MAP_LAYOUT", () => {
-  const KNOWN: readonly MapChar[] = ["#", "R", ".", "T", "B", "W", "Q", "E", "P", "A", "M"];
+  const KNOWN: readonly MapChar[] = ["#", "R", ".", "T", "B", "W", "Q", "E", "P", "A", "M", "F"];
 
   it("12 lignes × 16 colonnes", () => {
     expect(MAP_LAYOUT).toHaveLength(12);
@@ -244,5 +249,63 @@ describe("balance — MAP_LAYOUT", () => {
     const flat = MAP_LAYOUT.join("");
     expect(flat.split("A").length - 1).toBe(3);
     expect(flat.split("M").length - 1).toBe(2);
+  });
+
+  it("exactement un feu de camp F, en (9,5)", () => {
+    expect(MAP_LAYOUT.join("").split("F").length - 1).toBe(1);
+    expect(MAP_LAYOUT[5]![9]).toBe("F");
+  });
+});
+
+describe("balance — jour/nuit, feu, sommeil (docs/design/day-night.md §6.2)", () => {
+  const CYCLE = TIME.dayTicks + TIME.nightTicks;
+  /** Combustions par boucle naïve sur [from, to] (référence indépendante de src/core/time.ts). */
+  const naiveBurns = (from: number, to: number): number => {
+    let n = 0;
+    for (let t = from; t <= to; t++) {
+      const night = t % CYCLE >= TIME.dayTicks;
+      if (t % (night ? FIRE.nightBurnIntervalTicks : FIRE.dayBurnIntervalTicks) === 0) n++;
+    }
+    return n;
+  };
+
+  it("divisibilités : dayBurn divise dayTicks et le cycle ; nightBurn divise dayTicks, nightTicks et le cycle", () => {
+    expect(TIME.dayTicks % FIRE.dayBurnIntervalTicks).toBe(0);
+    expect(CYCLE % FIRE.dayBurnIntervalTicks).toBe(0);
+    expect(TIME.dayTicks % FIRE.nightBurnIntervalTicks).toBe(0);
+    expect(TIME.nightTicks % FIRE.nightBurnIntervalTicks).toBe(0);
+    expect(CYCLE % FIRE.nightBurnIntervalTicks).toBe(0);
+  });
+
+  it("feu : initialWood ≤ capacity, lowWood < capacity, pas entiers ≥ 1", () => {
+    expect(FIRE.initialWood).toBeLessThanOrEqual(FIRE.capacity);
+    expect(FIRE.lowWood).toBeLessThan(FIRE.capacity);
+    for (const v of [FIRE.burnPerStep, FIRE.feedIntervalTicks, FIRE.feedPerStep, FIRE.feedRangeTiles, FIRE.feedDelayTicks]) {
+      expect(isPosInt(v)).toBe(true);
+    }
+  });
+
+  it("feu : délai d'arrêt avant alimentation plus court que la traversée de la zone", () => {
+    // Traverser une tuile de la zone prend unitsPerTile / speed ticks : un passage sans arrêt dure
+    // plus longtemps que le délai (c'est donc bien l'immobilité, pas la durée, qui déclenche).
+    expect(FIRE.feedDelayTicks).toBeLessThan((3 * WORLD.unitsPerTile) / PLAYER.speed);
+  });
+
+  it("froid : rewardDivisor ≥ 1 ; sommeil : dawnBonus entier ≥ 0", () => {
+    expect(isPosInt(COLD.rewardDivisor)).toBe(true);
+    expect(Number.isSafeInteger(SLEEP.dawnBonus) && SLEEP.dawnBonus >= 0).toBe(true);
+  });
+
+  it("feu ignoré : extinction exactement au milieu de la nuit 1 (initialWood − burns(jour 1) = burns([2400, 3000]))", () => {
+    const mid = TIME.dayTicks + TIME.nightTicks / 2;
+    expect(FIRE.burnPerStep * (naiveBurns(1, TIME.dayTicks - 1) + naiveBurns(TIME.dayTicks, mid))).toBe(FIRE.initialWood);
+  });
+
+  it("feu plein au crépuscule ⇒ tient toute la nuit (capacity > combustions d'une nuit)", () => {
+    expect(FIRE.capacity).toBeGreaterThan(FIRE.burnPerStep * naiveBurns(TIME.dayTicks, CYCLE - 1));
+  });
+
+  it("présentation : aube + crépuscule tiennent dans le jour", () => {
+    expect(TIME.dawnTicks + TIME.duskTicks).toBeLessThan(TIME.dayTicks);
   });
 });

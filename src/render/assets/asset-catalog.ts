@@ -2967,7 +2967,7 @@ export const ASSETS = {
   },
   "survival/bedroll": {
     "id": "survival/bedroll",
-    "shipped": false,
+    "shipped": true,
     "pack": "survival",
     "name": "bedroll",
     "kind": "static",
@@ -3120,7 +3120,7 @@ export const ASSETS = {
   },
   "survival/campfire-pit": {
     "id": "survival/campfire-pit",
-    "shipped": false,
+    "shipped": true,
     "pack": "survival",
     "name": "campfire-pit",
     "kind": "static",
@@ -3855,7 +3855,7 @@ export const ASSETS = {
   },
   "survival/tent-canvas-half": {
     "id": "survival/tent-canvas-half",
-    "shipped": true,
+    "shipped": false,
     "pack": "survival",
     "name": "tent-canvas-half",
     "kind": "static",
@@ -4993,7 +4993,7 @@ export const ASSETS = {
 export type AssetId = keyof typeof ASSETS;
 
 /** Modèles livrés dans le jeu (liste blanche tools/shipped-assets.json). Le jeu ne doit référencer que ceux-là. */
-export const SHIPPED_IDS = ["forest/Bush_2_A_Color1","forest/Grass_1_A_Color1","forest/Grass_2_A_Color1","forest/Rock_3_A_Color1","forest/Rock_3_C_Color1","forest/Tree_1_A_Color1","forest/Tree_2_A_Color1","forest/Tree_3_A_Color1","forest/Tree_4_A_Color1","survival/tent-canvas-half","survival/tent-canvas","characters/Knight","characters/Mage","characters/Ranger","characters/Rogue","characters/Rogue_Hooded","animations/Rig_Medium_General","animations/Rig_Medium_MovementBasic"] as const satisfies readonly AssetId[];
+export const SHIPPED_IDS = ["forest/Bush_2_A_Color1","forest/Grass_1_A_Color1","forest/Grass_2_A_Color1","forest/Rock_3_A_Color1","forest/Rock_3_C_Color1","forest/Tree_1_A_Color1","forest/Tree_2_A_Color1","forest/Tree_3_A_Color1","forest/Tree_4_A_Color1","survival/bedroll","survival/campfire-pit","survival/tent-canvas","characters/Knight","characters/Mage","characters/Ranger","characters/Rogue","characters/Rogue_Hooded","animations/Rig_Medium_General","animations/Rig_Medium_MovementBasic"] as const satisfies readonly AssetId[];
 
 export type ShippedAssetId = (typeof SHIPPED_IDS)[number];
 

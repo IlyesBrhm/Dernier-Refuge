@@ -42,12 +42,21 @@ describe("tools/shipped-assets.json ↔ RENDER3D_ASSET_IDS", () => {
     expect([...listed].filter((id) => !used.has(id)).sort()).toEqual([]); // livré mais inutilisé
   });
 
-  it("liste blanche à 18 ids ; anciens modèles retirés (Barbarian, tente survival/tent) non livrés", () => {
-    expect(shippedIds).toHaveLength(18);
-    expect(RENDER3D_ASSET_IDS).toHaveLength(18);
+  it("liste blanche à 19 ids ; anciens modèles retirés (Barbarian, survival/tent, survival/tent-canvas-half) non livrés", () => {
+    expect(shippedIds).toHaveLength(19);
+    expect(RENDER3D_ASSET_IDS).toHaveLength(19);
     expect(shippedIds).not.toContain("characters/Barbarian");
     expect(shippedIds).not.toContain("survival/tent");
+    expect(shippedIds).not.toContain("survival/tent-canvas-half");
     expect(shippedIds).toContain("characters/Knight");
+  });
+
+  it("jour/nuit (docs/design/day-night.md §4.6) : feu de camp et sac de couchage livrés et utilisés", () => {
+    for (const id of ["survival/campfire-pit", "survival/bedroll", "survival/tent-canvas"]) {
+      expect(shippedIds, id).toContain(id);
+      expect(RENDER3D_ASSET_IDS as readonly string[], id).toContain(id);
+    }
+    expect(RENDER3D_ASSET_IDS as readonly string[]).not.toContain("survival/tent-canvas-half");
   });
 
   it("personnages : tous livrés", () => {

@@ -14,6 +14,7 @@ export interface ParsedMap {
   slotTiles: TilePos[]; // ordre de lecture = index dans BUILD.slotCosts
   playerStart: TilePos;
   nodes: ParsedNode[]; // nœuds récoltables, ordre de lecture (A = tree, M = bush)
+  fire: TilePos; // feu de camp F (exactement un)
 }
 
 const U = WORLD.unitsPerTile;
@@ -31,6 +32,7 @@ export function parseMap(layout: readonly string[]): ParsedMap {
   const entrance: TilePos[] = [];
   const start: TilePos[] = [];
   const nodes: ParsedNode[] = [];
+  const fires: TilePos[] = [];
   layout.forEach((row, ty) => {
     if (row.length !== width) throw new Error(`ligne ${ty} de longueur ${row.length} au lieu de ${width}`);
     for (let tx = 0; tx < width; tx++) {
@@ -78,6 +80,10 @@ export function parseMap(layout: readonly string[]): ParsedMap {
           tiles.push("node");
           nodes.push({ kind: "bush", tile: pos });
           break;
+        case "F":
+          tiles.push("fire");
+          fires.push(pos);
+          break;
         default:
           throw new Error(`caractère inconnu '${String(c)}' en (${tx},${ty})`);
       }
@@ -90,14 +96,17 @@ export function parseMap(layout: readonly string[]): ParsedMap {
   if (entrance.length !== 1 || !e) throw new Error("il faut exactement une tuile E");
   if (start.length !== 1 || !p) throw new Error("il faut exactement une tuile P");
   if (queue.length === 0) throw new Error("il faut au moins une tuile Q");
+  const f = fires[0];
+  if (fires.length !== 1 || !f) throw new Error("il faut exactement une tuile F");
   // Tête de file = la plus proche de W, puis gauche, puis haut.
   queue.sort((a, b) => manhattan(a, w) - manhattan(b, w) || a.tx - b.tx || a.ty - b.ty);
   return {
-    map: { width, height, tiles, entrance: e, welcome: w, queueTiles: queue },
+    map: { width, height, tiles, entrance: e, welcome: w, queueTiles: queue, fire: f },
     tentTiles,
     slotTiles,
     playerStart: p,
     nodes,
+    fire: f,
   };
 }
 
@@ -134,10 +143,13 @@ export function tileAt(map: MapState, tx: number, ty: number): Tile | undefined 
   return map.tiles[ty * map.width + tx];
 }
 
-/** Hors carte = obstacle. Les nœuds récoltables sont des obstacles permanents (prêts ou épuisés). */
+/**
+ * Hors carte = obstacle. Les nœuds récoltables (prêts ou épuisés) et le feu de camp sont des
+ * obstacles permanents.
+ */
 export function isObstacleAt(map: MapState, tx: number, ty: number): boolean {
   const t = tileAt(map, tx, ty);
-  return t === undefined || t === "tree" || t === "rock" || t === "node";
+  return t === undefined || t === "tree" || t === "rock" || t === "node" || t === "fire";
 }
 
 export function isWalkable(map: MapState, t: TilePos): boolean {

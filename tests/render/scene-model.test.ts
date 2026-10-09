@@ -1,8 +1,20 @@
 // Modèle de scène 3D pur (docs/design/render-3d.md §4.3 et §6.1) : sans WebGL, sans three.
 
-import { WORLD } from "../../src/data/balance";
+import { FIRE, TIME, WORLD } from "../../src/data/balance";
 import { applyCommand } from "../../src/core/commands";
-import { harvestTarget, isPlayerOn, nodeHarvestRatio, nodeRegrowRatio, slotRemaining } from "../../src/core/selectors";
+import {
+  feedZone,
+  fireRatio,
+  harvestTarget,
+  isFeedingFire,
+  isFireLit,
+  isFireLow,
+  isPlayerOn,
+  nodeHarvestRatio,
+  nodeRegrowRatio,
+  slotRemaining,
+  welcomeBlockedByCold,
+} from "../../src/core/selectors";
 import type { Drop, GameState, Survivor } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
 import { interpolate } from "../../src/render/interpolate";
@@ -14,13 +26,17 @@ import {
   survivorVariant,
   type CharacterItem,
   type DropItem,
+  type FireItem,
   type NodeItem,
   type SceneFrame,
   type SceneItem,
   type SlotItem,
   type TentItem,
 } from "../../src/render/three/scene-model";
-import { deepFreeze, edit, fresh } from "../core/helpers";
+import { tileCenter } from "../../src/core/map";
+import { lightingAt } from "../../src/render/daylight";
+import { AWAY, FEED_SPOT, FIRE_NEIGHBOURS, scenario } from "../core/day-night-fixtures";
+import { deepFreeze, edit, expectValid, fresh } from "../core/helpers";
 import { findPair, numbersIn, simulate } from "./helpers";
 
 // Filet de sécurité : si un module du graphe de scene-model importait three, son chargement échouerait.
@@ -30,11 +46,26 @@ vi.mock("three", () => {
 
 const U = WORLD.unitsPerTile;
 
-// Plusieurs tests balaient une simulation de 3000 ticks.
-vi.setConfig({ testTimeout: 30_000 });
+// Plusieurs tests balaient une simulation de 3000 ticks : délai explicite, large, pour rester fiable
+// quand la machine est chargée (la suite complète tourne en parallèle sur tous les cœurs).
+// Dans les boucles longues, les vérifications sont collectées dans un tableau d'erreurs puis
+// comparées une seule fois (`expect` par valeur coûte cher sur 3000 ticks × N éléments) : mêmes
+// vérifications, sans perte de couverture.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 // Une simulation longue partagée (bot de tests/core), couvrant tous les statuts.
 const SIM = simulate(2024, 3000);
+
+/** Collecte d'erreurs : `check(cond, msg)` n'enregistre que les échecs (10 premiers affichés). */
+function collector(): { check: (cond: boolean, msg: () => string) => void; errors: string[] } {
+  const errors: string[] = [];
+  return {
+    errors,
+    check: (cond, msg) => {
+      if (!cond) errors.push(msg());
+    },
+  };
+}
 
 function frame(prev: GameState, curr: GameState, alpha = 1): SceneFrame {
   return buildScene(prev, curr, alpha);
@@ -56,7 +87,7 @@ function withPlayerAt(s: GameState, x: number, y: number): GameState {
   });
 }
 
-const RANK: Record<string, number> = { player: 0, survivor: 1, node: 2, tent: 3, slot: 4, drop: 5 };
+const RANK: Record<string, number> = { player: 0, survivor: 1, node: 2, tent: 3, slot: 4, drop: 5, fire: 6 };
 function rankOf(key: string): number {
   const prefix = key.split(":")[0] as string;
   const r = RANK[prefix];
@@ -151,17 +182,24 @@ describe("buildScene — pureté (sans three, sans WebGL)", () => {
 
   it("simulation 600 ticks (bot) : buildScene à chaque tick, aucune exception, aucun NaN/Infinity", () => {
     const states = simulate(7, 600);
+    const { check, errors } = collector();
+    let numbers = 0;
     for (let i = 1; i < states.length; i++) {
       for (const a of [0, 0.25, 0.5, 1]) {
         const f = buildScene(states[i - 1] as GameState, states[i] as GameState, a);
-        for (const n of numbersIn(f)) expect(Number.isFinite(n)).toBe(true);
+        for (const n of numbersIn(f)) {
+          numbers++;
+          check(Number.isFinite(n), () => `tick ${i} α=${a}: ${n}`);
+        }
       }
     }
+    expect(errors.slice(0, 10)).toEqual([]);
+    expect(numbers).toBeGreaterThan(600 * 4 * 10);
   });
 });
 
 describe("buildScene — état initial et clés", () => {
-  it("1 joueur, 1 tente libre, 3 slots, 5 nœuds, 0 survivant, 0 drop", () => {
+  it("1 joueur, 1 tente libre, 3 slots, 5 nœuds, 0 survivant, 0 drop, 1 feu (dernier)", () => {
     const s = fresh();
     const f = frame(s, s);
     const count = (t: string): number => f.items.filter((i) => i.type === t).length;
@@ -174,6 +212,8 @@ describe("buildScene — état initial et clés", () => {
     expect(count("tree")).toBe(3);
     expect(count("bush")).toBe(2);
     expect(count("drop")).toBe(0);
+    expect(count("fire")).toBe(1);
+    expect(f.items[f.items.length - 1]?.key).toBe("fire");
   });
 
   it("joueur au centre de P (7,8) ⇒ x = 15 m, z = 17 m ; focus = joueur ; modèle Knight, teinte PLAYER_TINT", () => {
@@ -190,50 +230,72 @@ describe("buildScene — état initial et clés", () => {
     expect(frame(s, s).focus).toEqual({ x: 15, z: 17 });
   });
 
-  it("clés au bon format, uniques, dans l'ordre player, survivants (id croissant), nœuds, tentes, slots, drops", () => {
+  it("clés au bon format, uniques, dans l'ordre player, survivants (id croissant), nœuds, tentes, slots, drops, feu", () => {
     let sawSurvivors = 0;
     let sawDrops = 0;
+    const { check, errors } = collector();
+    const KEY_RE = /^(player|fire|(survivor|node|tent|slot|drop):\d+)$/;
     for (let i = 1; i < SIM.length; i++) {
       const f = frame(SIM[i - 1] as GameState, SIM[i] as GameState, 0.5);
       const keys = f.items.map((it) => it.key);
-      expect(new Set(keys).size).toBe(keys.length);
-      expect(keys[0]).toBe("player");
-      for (const k of keys) expect(k).toMatch(/^(player|(survivor|node|tent|slot|drop):\d+)$/);
-      for (let k = 1; k < keys.length; k++) expect(rankOf(keys[k] as string)).toBeGreaterThanOrEqual(rankOf(keys[k - 1] as string));
+      const at = `tick ${i}`;
+      check(new Set(keys).size === keys.length, () => `${at}: clés dupliquées`);
+      check(keys[0] === "player", () => `${at}: première clé ${keys[0]}`);
+      check(keys[keys.length - 1] === "fire", () => `${at}: dernière clé ${keys[keys.length - 1]}`);
+      check(keys.filter((k) => k === "fire").length === 1, () => `${at}: nombre de feux`);
+      for (const k of keys) check(KEY_RE.test(k), () => `${at}: clé mal formée ${k}`);
+      for (let k = 1; k < keys.length; k++) {
+        check(rankOf(keys[k] as string) >= rankOf(keys[k - 1] as string), () => `${at}: ordre ${keys[k - 1]} puis ${keys[k]}`);
+      }
       const survivorIds = keys.filter((k) => k.startsWith("survivor:")).map((k) => Number(k.slice(9)));
-      expect(survivorIds).toEqual([...survivorIds].sort((a, b) => a - b));
+      check(survivorIds.every((id, j) => j === 0 || id > (survivorIds[j - 1] as number)), () => `${at}: survivants non triés ${survivorIds.join()}`);
       // Type cohérent avec le préfixe.
       for (const it of f.items) {
         const prefix = it.key.split(":")[0];
-        if (prefix === "player" || prefix === "survivor") expect(it.type).toBe("character");
-        else if (prefix === "node") expect(["tree", "bush"]).toContain(it.type);
-        else expect(it.type).toBe(prefix);
+        const ok =
+          prefix === "player" || prefix === "survivor"
+            ? it.type === "character"
+            : prefix === "node"
+              ? it.type === "tree" || it.type === "bush"
+              : it.type === prefix;
+        check(ok, () => `${at}: ${it.key} de type ${it.type}`);
       }
       sawSurvivors += survivorIds.length;
       sawDrops += keys.filter((k) => k.startsWith("drop:")).length;
     }
+    expect(errors.slice(0, 10)).toEqual([]);
     expect(sawSurvivors).toBeGreaterThan(0);
     expect(sawDrops).toBeGreaterThan(0);
   });
 
   it("ids stables d'une image à l'autre : même entité ⇒ même clé et même type", () => {
+    const { check, errors } = collector();
+    // Chaque image n'est construite qu'une fois : b (i) sert de a (i + 1).
+    let a = frame(SIM[0] as GameState, SIM[1] as GameState);
     for (let i = 2; i < SIM.length; i++) {
-      const a = frame(SIM[i - 2] as GameState, SIM[i - 1] as GameState);
       const b = frame(SIM[i - 1] as GameState, SIM[i] as GameState);
       const typeA = new Map(a.items.map((it) => [it.key, it.type]));
+      const at = `tick ${i}`;
       for (const it of b.items) {
         const t = typeA.get(it.key);
         // Seule transformation de type autorisée : aucune (un nœud reste arbre/buisson).
-        if (t !== undefined) expect(it.type).toBe(t);
+        check(t === undefined || it.type === t, () => `${at}: ${it.key} ${String(t)} → ${it.type}`);
       }
       // Les survivants et drops de l'état ont exactement leur clé.
       const curr = SIM[i] as GameState;
-      for (const s of curr.survivors) expect(typeA.has(`survivor:${s.id}`) || !(SIM[i - 1] as GameState).survivors.some((x) => x.id === s.id)).toBe(true);
-      expect(b.items.filter((it) => it.key.startsWith("survivor:")).map((it) => it.key)).toEqual(
-        curr.survivors.map((s) => `survivor:${s.id}`),
-      );
-      expect(b.items.filter((it) => it.key.startsWith("drop:")).map((it) => it.key)).toEqual(curr.drops.map((d) => `drop:${d.id}`));
+      for (const s of curr.survivors) {
+        check(
+          typeA.has(`survivor:${s.id}`) || !(SIM[i - 1] as GameState).survivors.some((x) => x.id === s.id),
+          () => `${at}: survivor:${s.id} absent de l'image précédente`,
+        );
+      }
+      const survKeys = b.items.filter((it) => it.key.startsWith("survivor:")).map((it) => it.key).join();
+      check(survKeys === curr.survivors.map((s) => `survivor:${s.id}`).join(), () => `${at}: clés survivants ${survKeys}`);
+      const dropKeys = b.items.filter((it) => it.key.startsWith("drop:")).map((it) => it.key).join();
+      check(dropKeys === curr.drops.map((d) => `drop:${d.id}`).join(), () => `${at}: clés drops ${dropKeys}`);
+      a = b;
     }
+    expect(errors.slice(0, 10)).toEqual([]);
   });
 });
 
@@ -281,30 +343,36 @@ describe("buildScene — alpha et interpolation", () => {
 
   it("positions = lerp(prev, curr, alpha) comme en 2D (interpolate.ts), sur toute une simulation", () => {
     let checkedDrops = 0;
+    const { check, errors } = collector();
+    // Même tolérance que toBeCloseTo(…, 9) : |a − b| < 10^−9 / 2.
+    const close = (a: number, b: number): boolean => Math.abs(a - b) < 5e-10;
     for (let i = 1; i < SIM.length; i += 3) {
       const p = SIM[i - 1] as GameState;
       const c = SIM[i] as GameState;
       for (const a of [0, 0.3, 0.75, 1]) {
         const f = frame(p, c, a);
         const pos = interpolate(p, c, a);
-        expect(player(f).x).toBeCloseTo(toMeters(pos.player.x), 9);
-        expect(player(f).z).toBeCloseTo(toMeters(pos.player.y), 9);
-        expect(f.focus).toEqual({ x: player(f).x, z: player(f).z });
+        const at = `tick ${i} α=${a}`;
+        const pl = player(f);
+        check(close(pl.x, toMeters(pos.player.x)) && close(pl.z, toMeters(pos.player.y)), () => `${at}: joueur`);
+        check(f.focus.x === pl.x && f.focus.z === pl.z, () => `${at}: focus`);
         for (const s of c.survivors) {
           const it = item<CharacterItem>(f, `survivor:${s.id}`);
           const v = pos.survivors.get(s.id);
-          expect(it.x).toBeCloseTo(toMeters(v!.x), 9);
-          expect(it.z).toBeCloseTo(toMeters(v!.y), 9);
+          check(!!v && close(it.x, toMeters(v.x)) && close(it.z, toMeters(v.y)), () => `${at}: survivor:${s.id}`);
         }
         for (const d of c.drops) {
           const it = item<DropItem>(f, `drop:${d.id}`);
           const v = pos.drops.get(d.id);
-          expect(it.x).toBeCloseTo(toMeters(v!.x) + expectedDropOffset(c.drops, d), 9);
-          expect(it.z).toBeCloseTo(toMeters(v!.y), 9);
+          check(
+            !!v && close(it.x, toMeters(v.x) + expectedDropOffset(c.drops, d)) && close(it.z, toMeters(v.y)),
+            () => `${at}: drop:${d.id}`,
+          );
           checkedDrops++;
         }
       }
     }
+    expect(errors.slice(0, 10)).toEqual([]);
     expect(checkedDrops).toBeGreaterThan(0);
   });
 });
@@ -436,9 +504,11 @@ describe("buildScene — survivants (variantes, visibilité)", () => {
     }
   });
 
-  it("survivant « resting » ⇒ visible false ; tous les autres statuts ⇒ visible true", () => {
+  it("survivant « resting » ou « sleeping » (dans sa tente) ⇒ visible false ; tous les autres statuts ⇒ visible true", () => {
+    // SIM (3000 ticks) traverse la tombée de la nuit (tick 2400) : des survivants s'y endorment.
     const statuses = new Set<string>();
     let resting = 0;
+    let sleeping = 0;
     for (let i = 1; i < SIM.length; i++) {
       const c = SIM[i] as GameState;
       if (c.survivors.length === 0) continue;
@@ -446,13 +516,15 @@ describe("buildScene — survivants (variantes, visibilité)", () => {
       for (const s of c.survivors) {
         statuses.add(s.status);
         const it = item<CharacterItem>(f, `survivor:${s.id}`);
-        expect(it.visible).toBe(s.status !== "resting");
+        expect(it.visible).toBe(s.status !== "resting" && s.status !== "sleeping");
         expect(it.role).toBe("survivor");
         if (s.status === "resting") resting++;
+        if (s.status === "sleeping") sleeping++;
       }
     }
     expect(resting).toBeGreaterThan(0);
-    expect(statuses).toEqual(new Set(["toQueue", "queued", "walkingToTent", "resting", "leaving"]));
+    expect(sleeping).toBeGreaterThan(0);
+    expect(statuses).toEqual(new Set(["toQueue", "queued", "walkingToTent", "resting", "sleeping", "leaving"]));
   });
 });
 
@@ -541,32 +613,32 @@ describe("buildScene — nœuds", () => {
 describe("buildScene — tentes", () => {
   it("chaque statut libre / assignée / occupée / désordre est rendu tel quel ; clean et playerOn cohérents", () => {
     const seen = new Set<string>();
+    const { check, errors } = collector();
     for (let i = 1; i < SIM.length; i++) {
       const p = SIM[i - 1] as GameState;
       const c = SIM[i] as GameState;
       const f = frame(p, c, 0.5);
+      const at = `tick ${i}`;
       const tents = f.items.filter((it): it is TentItem => it.type === "tent");
-      expect(tents.map((t) => t.key)).toEqual(c.tents.map((t) => `tent:${t.id}`));
+      check(tents.map((t) => t.key).join() === c.tents.map((t) => `tent:${t.id}`).join(), () => `${at}: clés des tentes`);
       for (const t of c.tents) {
         const it = item<TentItem>(f, `tent:${t.id}`);
+        const bad = (what: string, cond: boolean): void => check(cond, () => `${at} tent:${t.id}: ${what}`);
         seen.add(it.status);
-        expect(it.status).toBe(t.status);
-        expect(it.clean).toBeCloseTo(t.cleanProgress / 30, 12);
-        expect(it.clean).toBeGreaterThanOrEqual(0);
-        expect(it.clean).toBeLessThanOrEqual(1);
-        expect(it.playerOn).toBe(isPlayerOn(c, t.tile));
-        expect(it.x).toBe((t.tile.tx + 0.5) * TILE_METERS);
-        expect(it.z).toBe((t.tile.ty + 0.5) * TILE_METERS);
+        bad("status", it.status === t.status);
+        bad(`clean ${it.clean}`, Math.abs(it.clean - t.cleanProgress / 30) < 5e-13 && it.clean >= 0 && it.clean <= 1);
+        bad("playerOn", it.playerOn === isPlayerOn(c, t.tile));
+        bad("position", it.x === (t.tile.tx + 0.5) * TILE_METERS && it.z === (t.tile.ty + 0.5) * TILE_METERS);
         const occ = t.occupantId === null ? undefined : c.survivors.find((s) => s.id === t.occupantId);
+        bad("sleeping", it.sleeping === (t.status === "occupied" && occ?.status === "sleeping"));
         if (t.status === "occupied" && occ?.status === "resting") {
-          expect(it.rest).not.toBeNull();
-          expect(it.rest!).toBeGreaterThanOrEqual(0);
-          expect(it.rest!).toBeLessThanOrEqual(1);
+          bad(`rest ${String(it.rest)}`, it.rest !== null && it.rest >= 0 && it.rest <= 1);
         } else {
-          expect(it.rest).toBeNull();
+          bad(`rest ${String(it.rest)} ≠ null`, it.rest === null);
         }
       }
     }
+    expect(errors.slice(0, 10)).toEqual([]);
     expect(seen).toEqual(new Set(["free", "assigned", "occupied", "messy"]));
   });
 
@@ -585,6 +657,7 @@ describe("buildScene — tentes", () => {
       const t = c.tents.find((x) => x.id === tent.id)!;
       if (t.status !== "occupied") break;
       const occ = c.survivors.find((s) => s.id === t.occupantId)!;
+      if (occ.status !== "resting") break; // endormi à la tombée de la nuit : plus de barre de repos
       const it = item<TentItem>(frame(SIM[i - 1] as GameState, c, 1), `tent:${t.id}`);
       expect(it.rest).toBeCloseTo(1 - occ.restTicksLeft / 150, 12);
       expect(it.rest!).toBeGreaterThan(last);
@@ -797,5 +870,292 @@ describe("buildScene — accueil", () => {
       if (f.welcome.active && f.welcome.ratio > 0) active++;
     }
     expect(active).toBeGreaterThan(0);
+  });
+});
+
+// ================================================================================================
+// Jour/nuit (docs/design/day-night.md §4.4, §4.5, §4.7, §6.4).
+// ================================================================================================
+
+function fireItem(f: SceneFrame): FireItem {
+  return item<FireItem>(f, "fire");
+}
+
+function withFireWood(s: GameState, wood: number): GameState {
+  return edit(s, (d) => {
+    d.fire.wood = wood;
+  });
+}
+
+function atTile(s: GameState, t: { tx: number; ty: number }): GameState {
+  const c = tileCenter(t);
+  return withPlayerAt(s, c.x, c.y);
+}
+
+const DAY_TICK = 1000;
+const NIGHT_TICK = 2900;
+
+describe("buildScene — feu de camp (FireItem)", () => {
+  it("un seul FireItem, clé « fire », centre de F (9,5) ⇒ x = 19 m, z = 11 m", () => {
+    const s = fresh();
+    const f = fireItem(frame(s, s));
+    expect(f).toMatchObject({ key: "fire", type: "fire", x: 9.5 * TILE_METERS, z: 5.5 * TILE_METERS });
+    expect(f.x).toBe(19);
+    expect(f.z).toBe(11);
+    expect(s.map.fire).toEqual({ tx: 9, ty: 5 });
+  });
+
+  it("ratio = wood / capacity (α = 1), lit ⇔ wood > 0, pour chaque valeur de 0 à capacity", () => {
+    for (let w = 0; w <= FIRE.capacity; w++) {
+      const s = withFireWood(scenario({ tick: NIGHT_TICK }), w);
+      const it = fireItem(frame(s, s, 1));
+      expect(it.ratio).toBeCloseTo(w / FIRE.capacity, 12);
+      expect(it.ratio).toBe(fireRatio(s));
+      expect(it.lit).toBe(w > 0);
+      expect(it.lit).toBe(isFireLit(s));
+    }
+  });
+
+  it("ratio interpolé entre prev et curr (feu qui baisse ou qui monte), monotone en alpha", () => {
+    const base = scenario({ tick: NIGHT_TICK });
+    for (const [w0, w1] of [
+      [5, 4],
+      [4, 5],
+      [0, 1],
+      [1, 0],
+    ] as const) {
+      const p = withFireWood(base, w0);
+      const c = withFireWood(base, w1);
+      let last = w1 > w0 ? -Infinity : Infinity;
+      for (const a of [0, 0.25, 0.5, 0.75, 1]) {
+        const r = fireItem(frame(p, c, a)).ratio;
+        expect(r).toBeCloseTo((w0 + (w1 - w0) * a) / FIRE.capacity, 12);
+        if (w1 > w0) expect(r).toBeGreaterThanOrEqual(last);
+        else expect(r).toBeLessThanOrEqual(last);
+        last = r;
+      }
+      // lit vient de curr (pas d'interpolation) : la mémoire de fondu est côté vue.
+      expect(fireItem(frame(p, c, 0)).lit).toBe(w1 > 0);
+    }
+  });
+
+  it("ratio borné à [0, 1] même sur des valeurs hors bornes (état non validé)", () => {
+    const s = fresh();
+    expect(fireItem(frame(s, withFireWood(s, 999))).ratio).toBe(1);
+    expect(fireItem(frame(s, withFireWood(s, -3))).ratio).toBe(0);
+    for (const n of numbersIn(frame(withFireWood(s, -3), withFireWood(s, 999), 0.5))) expect(Number.isFinite(n)).toBe(true);
+  });
+
+  it("low = isFireLow : nuit ∧ 0 < wood ≤ lowWood ; jamais le jour, jamais éteint", () => {
+    const cases: [number, number, boolean][] = [
+      [NIGHT_TICK, FIRE.lowWood, true],
+      [NIGHT_TICK, 1, true],
+      [NIGHT_TICK, FIRE.lowWood + 1, false],
+      [NIGHT_TICK, 0, false],
+      [DAY_TICK, 1, false],
+      [DAY_TICK, FIRE.lowWood, false],
+      [TIME.dayTicks, 1, true], // premier tick de nuit
+      [TIME.dayTicks - 1, 1, false], // dernier tick de jour
+    ];
+    for (const [t, w, low] of cases) {
+      const s = withFireWood(scenario({ tick: t }), w);
+      const it = fireItem(frame(s, s));
+      expect(it.low, `tick ${t} wood ${w}`).toBe(low);
+      expect(it.low).toBe(isFireLow(s));
+    }
+  });
+
+  it("playerNear : vrai sur chacune des 8 voisines de F, faux à distance 2 et loin", () => {
+    const s0 = scenario({ tick: NIGHT_TICK });
+    for (const t of FIRE_NEIGHBOURS) {
+      const s = atTile(s0, t);
+      expect(fireItem(frame(s, s)).playerNear, `(${t.tx},${t.ty})`).toBe(true);
+    }
+    expect(feedZone(s0.map)).toHaveLength(8);
+    for (const t of [AWAY, { tx: 9, ty: 7 }, { tx: 11, ty: 5 }, { tx: 7, ty: 3 }, { tx: 11, ty: 7 }, s0.map.welcome]) {
+      const s = atTile(s0, t);
+      expect(fireItem(frame(s, s)).playerNear, `(${t.tx},${t.ty})`).toBe(false);
+    }
+  });
+
+  it("feeding = isFeedingFire : arrêté sur une voisine depuis feedDelayTicks, bois en stock, feu non plein", () => {
+    const ready = scenario({ tick: NIGHT_TICK, fireWood: 5, player: FEED_SPOT, wood: 10, feedProgress: "ready" });
+    expect(isFeedingFire(ready)).toBe(true);
+    expect(fireItem(frame(ready, ready)).feeding).toBe(true);
+    const noStock = edit(ready, (d) => {
+      d.resources.wood = 0;
+    });
+    expect(fireItem(frame(noStock, noStock)).feeding).toBe(false);
+    const full = withFireWood(ready, FIRE.capacity);
+    expect(fireItem(frame(full, full)).feeding).toBe(false);
+    const waiting = scenario({ tick: NIGHT_TICK, fireWood: 5, player: FEED_SPOT, wood: 10, feedProgress: 0 });
+    expect(fireItem(frame(waiting, waiting)).feeding).toBe(isFeedingFire(waiting));
+    expect(fireItem(frame(waiting, waiting)).feeding).toBe(false);
+    expect(fireItem(frame(waiting, waiting)).playerNear).toBe(true);
+  });
+
+  it("sur toute une simulation (jour puis nuit) : FireItem conforme aux sélecteurs de curr", () => {
+    const errors: string[] = [];
+    let lit = 0;
+    let low = 0;
+    for (let i = 1; i < SIM.length; i++) {
+      const p = SIM[i - 1] as GameState;
+      const c = SIM[i] as GameState;
+      const it = fireItem(frame(p, c, 1));
+      const at = `tick ${c.tick}`;
+      if (it.ratio !== fireRatio(c)) errors.push(`${at}: ratio`);
+      if (it.lit !== isFireLit(c)) errors.push(`${at}: lit`);
+      if (it.low !== isFireLow(c)) errors.push(`${at}: low`);
+      if (it.feeding !== isFeedingFire(c)) errors.push(`${at}: feeding`);
+      const mid = fireItem(frame(p, c, 0.5)).ratio;
+      if (!(mid >= Math.min(fireRatio(p), fireRatio(c)) - 1e-12 && mid <= Math.max(fireRatio(p), fireRatio(c)) + 1e-12)) {
+        errors.push(`${at}: ratio α=0,5 hors [prev, curr]`);
+      }
+      if (it.lit) lit++;
+      if (it.low) low++;
+    }
+    expect(errors.slice(0, 10)).toEqual([]);
+    expect(lit).toBeGreaterThan(0);
+    // Le bot de SIM n'alimente jamais le feu : il faiblit pendant la nuit 1 (ticks 2400..3000).
+    expect(low).toBeGreaterThan(0);
+  });
+});
+
+describe("buildScene — nuit : tentes des dormeurs, survivants endormis", () => {
+  it("dormeurs ⇒ TentItem.sleeping = true, rest = null, statut occupied ; survivant invisible ; tente libre ⇒ sleeping false", () => {
+    const s = scenario({ tick: NIGHT_TICK, tents: 3, sleeping: 2 });
+    expectValid(s);
+    const f = frame(s, s, 0.5);
+    for (const t of s.tents) {
+      const it = item<TentItem>(f, `tent:${t.id}`);
+      const occ = s.survivors.find((v) => v.id === t.occupantId);
+      if (occ) {
+        expect(it).toMatchObject({ status: "occupied", sleeping: true, rest: null });
+        expect(item<CharacterItem>(f, `survivor:${occ.id}`).visible).toBe(false);
+      } else {
+        expect(it).toMatchObject({ status: "free", sleeping: false, rest: null });
+      }
+    }
+    expect(f.items.filter((i) => i.type === "tent" && i.sleeping)).toHaveLength(2);
+  });
+
+  it("le jour, occupant au repos ⇒ sleeping false et barre de repos", () => {
+    const s = scenario({ tick: DAY_TICK, resting: 1, restTicksLeft: 60 });
+    expectValid(s);
+    const t = s.tents[0]!;
+    const it = item<TentItem>(frame(s, s), `tent:${t.id}`);
+    expect(it.sleeping).toBe(false);
+    expect(it.rest).toBeCloseTo(1 - 60 / 150, 12);
+  });
+
+  it("pas de la tombée de la nuit (2399 → 2400) : les tentes au repos passent « Zz » (sleeping, rest null) d'un coup", () => {
+    const p = scenario({ tick: TIME.dayTicks - 1, tents: 2, resting: 2, restTicksLeft: 100 });
+    expectValid(p);
+    const c = tick(p);
+    expectValid(c);
+    expect(c.survivors.every((v) => v.status === "sleeping")).toBe(true);
+    for (const a of [0, 0.5, 1]) {
+      const f = frame(p, c, a);
+      for (const t of c.tents) expect(item<TentItem>(f, `tent:${t.id}`)).toMatchObject({ sleeping: true, rest: null });
+      for (const v of c.survivors) expect(item<CharacterItem>(f, `survivor:${v.id}`).visible).toBe(false);
+    }
+  });
+
+  it("pas de l'aube (3599 → 3600) : tous les dormeurs partent, tentes en désordre, plus de « Zz », survivants visibles", () => {
+    const p = scenario({ tick: TIME.dayTicks + TIME.nightTicks - 1, tents: 4, sleeping: 4, fireWood: 8 });
+    expect(p.tick).toBe(3599);
+    expectValid(p);
+    const c = tick(p);
+    expectValid(c);
+    const f = frame(p, c, 0.5);
+    for (const t of c.tents) expect(item<TentItem>(f, `tent:${t.id}`)).toMatchObject({ status: "messy", sleeping: false, rest: null });
+    for (const v of c.survivors) {
+      expect(v.status).toBe("leaving");
+      expect(item<CharacterItem>(f, `survivor:${v.id}`).visible).toBe(true);
+    }
+    expect(f.items.filter((i) => i.type === "drop")).toHaveLength(4);
+  });
+});
+
+describe("buildScene — accueil suspendu par le froid (welcome.blockedByCold)", () => {
+  it("vrai ssi nuit ∧ feu à 0 (= welcomeBlockedByCold)", () => {
+    const cases: [number, number, boolean][] = [
+      [NIGHT_TICK, 0, true],
+      [TIME.dayTicks, 0, true],
+      [3599, 0, true],
+      [NIGHT_TICK, 1, false],
+      [DAY_TICK, 0, false],
+      [3600, 0, false],
+      [TIME.dayTicks - 1, 0, false],
+    ];
+    for (const [t, w, blocked] of cases) {
+      const s = withFireWood(scenario({ tick: t }), w);
+      const f = frame(s, s);
+      expect(f.welcome.blockedByCold, `tick ${t} wood ${w}`).toBe(blocked);
+      expect(f.welcome.blockedByCold).toBe(welcomeBlockedByCold(s));
+    }
+  });
+
+  it("sur la simulation : blockedByCold suit curr à chaque tick et devient vrai pendant la nuit 1 (feu non entretenu)", () => {
+    let blocked = 0;
+    for (let i = 1; i < SIM.length; i++) {
+      const c = SIM[i] as GameState;
+      const f = frame(SIM[i - 1] as GameState, c);
+      expect(f.welcome.blockedByCold).toBe(welcomeBlockedByCold(c));
+      if (f.welcome.blockedByCold) blocked++;
+    }
+    expect(blocked).toBeGreaterThan(0);
+  });
+});
+
+describe("buildScene — éclairage et cadrage", () => {
+  it("lighting = lightingAt(prev.tick + alpha) entre deux ticks consécutifs, y compris aux bascules", () => {
+    for (const t0 of [0, 150, 1200, 2099, 2399, 2400, 3000, 3599, 3600, 7199]) {
+      const p = edit(fresh(), (d) => {
+        d.tick = t0;
+      });
+      const c = edit(p, (d) => {
+        d.tick = t0 + 1;
+      });
+      for (const a of [0, 0.3, 0.999, 1]) {
+        expect(frame(p, c, a).lighting).toEqual(lightingAt(t0 + a));
+      }
+    }
+  });
+
+  it("bascule des ombres : prev = 2399 ⇒ soleil (α < 1) ; prev = 2400 ⇒ feu ; prev = 3599 ⇒ feu ; prev = 3600 ⇒ soleil", () => {
+    const at = (t: number): GameState =>
+      edit(fresh(), (d) => {
+        d.tick = t;
+      });
+    expect(frame(at(2399), at(2400), 0.5).lighting.shadowOwner).toBe("sun");
+    expect(frame(at(2400), at(2401), 0).lighting.shadowOwner).toBe("fire");
+    expect(frame(at(3599), at(3600), 0.5).lighting.shadowOwner).toBe("fire");
+    expect(frame(at(3600), at(3601), 0).lighting.shadowOwner).toBe("sun");
+  });
+
+  it("état unique (prev = curr, chargement) ⇒ lighting = lightingAt(tick) à α = 0", () => {
+    for (const t of [0, 1200, 2250, 2900, 3602]) {
+      const s = edit(fresh(), (d) => {
+        d.tick = t;
+      });
+      expect(frame(s, s, 0).lighting).toEqual(lightingAt(t));
+    }
+  });
+
+  it("framing : joueur = focus, welcome = centre de W, queue = centres des places occupées (tête en premier)", () => {
+    let withQueue = 0;
+    for (let i = 1; i < SIM.length; i += 5) {
+      const c = SIM[i] as GameState;
+      const f = frame(SIM[i - 1] as GameState, c, 0.5);
+      expect(f.framing.player).toEqual(f.focus);
+      expect(f.framing.welcome).toEqual({ x: 7.5 * TILE_METERS, z: 9.5 * TILE_METERS });
+      const n = Math.min(c.queue.length, c.map.queueTiles.length);
+      expect(f.framing.queue).toEqual(
+        c.map.queueTiles.slice(0, n).map((q) => ({ x: (q.tx + 0.5) * TILE_METERS, z: (q.ty + 0.5) * TILE_METERS })),
+      );
+      if (n > 0) withQueue++;
+    }
+    expect(withQueue).toBeGreaterThan(0);
   });
 });

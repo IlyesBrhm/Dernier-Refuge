@@ -26,9 +26,12 @@ export const MODEL_IDS = {
   tufts: ["forest/Grass_1_A_Color1", "forest/Grass_2_A_Color1"],
   nodeTree: "forest/Tree_3_A_Color1",
   bush: "forest/Bush_2_A_Color1",
-  /** Tente montée (libre / assignée : teinte claire ; occupée : couleurs d'origine). */
+  /** Tente montée (libre / assignée : teinte claire ; occupée : couleurs d'origine ; désordre : affaissée, salie). */
   tent: "survival/tent-canvas",
-  tentMessy: "survival/tent-canvas-half",
+  /** Sac de couchage en vrac devant une tente en désordre. */
+  bedroll: "survival/bedroll",
+  /** Foyer du feu de camp (pierres + bûches), sans ombre projetée. */
+  campfire: "survival/campfire-pit",
   /** Joueur : Knight, teinte d'origine (jamais utilisé pour un survivant) + anneau au sol. */
   player: "characters/Knight",
   survivors: ["characters/Mage", "characters/Ranger", "characters/Rogue", "characters/Rogue_Hooded"],
@@ -44,7 +47,8 @@ export const RENDER3D_ASSET_IDS = [
   MODEL_IDS.nodeTree,
   MODEL_IDS.bush,
   MODEL_IDS.tent,
-  MODEL_IDS.tentMessy,
+  MODEL_IDS.bedroll,
+  MODEL_IDS.campfire,
   MODEL_IDS.player,
   ...MODEL_IDS.survivors,
   MODEL_IDS.animGeneral,
@@ -69,7 +73,7 @@ export const SURVIVOR_VARIANTS = MODEL_IDS.survivors.length * SURVIVOR_TINTS.len
  * - tent : `survival/tent-canvas` est une tente canadienne ouverte aux deux pignons ; sur la capture
  *   desktop l'armature (même gabarit) présente son pignon en « A » face à la caméra ⇒ faîtage selon Z,
  *   ouverture en ±Z : 0 convient (π serait identique). Si l'aperçu (/tools/asset-preview/) montrait le
- *   faîtage selon X, mettre Math.PI / 2. La toile à moitié (désordre) n'est pas symétrique : sans enjeu.
+ *   faîtage selon X, mettre Math.PI / 2.
  */
 export const MODEL_YAW = { characters: 0, tent: 0 } as const;
 
@@ -127,7 +131,8 @@ export const COLORS3D = {
   /** Teinte du tapis d'accueil (multiplicateur), et lueur quand le joueur est dessus. */
   welcomeTintIdle: 0xdddddd,
   welcomeTintActive: 0xffffff,
-  welcomeGlowActive: 0x3a3000,
+  /** Lueur (emissive × texture) du tapis quand le joueur est dessus. */
+  welcomeGlowActive: 0x6a6a6a,
   queue: "#efe1bd",
   queueLine: "rgba(120, 96, 50, 0.65)",
   entrance: "#c7a46c",
@@ -146,7 +151,8 @@ export const COLORS3D = {
   tentAssigned: 0xffd23f,
   /** Toile d'une tente libre / assignée : multiplicateur clair et vert + légère lueur (accueillante). */
   tentFreeTint: 0xd4f7c0,
-  tentFreeGlow: 0x14300f,
+  /** Lueur (emissive × texture) de la toile d'une tente libre : légèrement verte, lisible de nuit. */
+  tentFreeGlow: 0x4a6a44,
   slotLine: "rgba(255, 255, 255, 0.9)",
   slotFill: "rgba(255, 255, 255, 0.16)",
   slotRing: 0xf0b43c,
@@ -154,6 +160,86 @@ export const COLORS3D = {
   logBark: 0x8b5a2b,
   logEnd: 0xd9a066,
   berryFood: 0xd0342c,
+  /**
+   * Tuile du feu : disque de terre sombre et de cendres fondu dans l'herbe (couleurs par sommet du
+   * sol, aucun draw call en plus). Remplace l'ancien carré « terre battue » (#8a6a45) trop orangé.
+   */
+  fireAsh: 0x3a342f,
+  fireEarth: 0x54442f,
+  /** Foyer Kenney (palette saumon / pêche) ramené vers des tons terre : multiplicateur du matériau cloné. */
+  firePitTint: 0xb09a8c,
+  /**
+   * Auto-éclairage léger (emissive × texture) des tapis au sol et des toiles de tente : ils gardent
+   * leur couleur propre sous toutes les lumières (nuit bleue, crépuscule orangé, halo du feu).
+   */
+  decalSelfLit: 0x4a4a4a,
+  tentSelfLit: 0x484848,
+  tentMessySelfLit: 0x383430,
+  /**
+   * Rochers la nuit (× poids de nuit) : multiplicateur chaud un peu assombri (atténue le bleu de
+   * l'hémisphère, que leur gris clair renvoyait en bleu saturé) + auto-éclairage neutre
+   * (emissive × texture) qui ramène vers un gris-bleu discret. Le jour : matériau d'origine.
+   */
+  rockNightTint: 0xd6c8b4,
+  rockNightSelfLit: 0x5a5a5a,
+  /** Tente en désordre : multiplicateur « sali » (après × ANIM.messyDarken). */
+  tentMessyTint: 0xb89a7a,
+  /** Braises : couleur de base et émission (× intensité selon le bois). */
+  emberBase: 0x2a1a12,
+  emberGlow: 0xff5a1a,
+  emberOut: 0x3a3634,
+} as const;
+
+/** Lumières du feu et du joueur (docs/design/day-night.md §4.3). Intensités en unités three (decay 2). */
+// Couleurs : un orange franc. L'herbe renvoie ~2,4× plus de vert que de rouge : une lumière
+// orange-jaune (#ffa860) y devenait jaune-vert citron. Le projecteur est donc un peu plus rouge que la
+// lueur ; intensités réduites pour ne pas brûler les bûches (rose délavé) sous le foyer.
+export const FIRE_LIGHT = {
+  spotColor: 0xff7034,
+  spotHeight: 2.4,
+  spotAngle: 1.2,
+  spotPenumbra: 0.6,
+  spotDecay: 2,
+  /** Portée = lerp(min, max, bois / capacité) (m). */
+  spotDistanceMin: 6,
+  spotDistanceMax: 16,
+  spotMax: 32,
+  spotMapCoarse: 512,
+  spotMapFine: 1024,
+  glowColor: 0xff8a3a,
+  /** Lueur placée au-dessus des flammes (à 0,8 m elle était à 0,5 m des bûches : surexposition). */
+  glowHeight: 1.3,
+  glowDistanceMin: 3,
+  glowDistanceMax: 8,
+  glowMax: 4,
+  /** Fondu « allumé » (s) au rallumage / à l'extinction. */
+  litFadeS: 0.5,
+  /** Blanc chaud peu saturé : un jaune pâle (#ffd9a0) rendait le halo vert citron sur l'herbe et orange sur la file. */
+  playerColor: 0xffe8d0,
+  playerHeight: 2,
+  playerDistance: 4,
+  /**
+   * Intensité max de la lumière du joueur. Le plan dit 0,8 ; avec decay 2 (unités physiques de three)
+   * cela ne donnait que ≈ 0,2 au sol. L'ambiance de nuit étant désormais lisible, 2 suffit.
+   */
+  playerMax: 2,
+} as const;
+
+/** Feu de camp 3D : foyer, flammes en particules, braises. */
+export const FIRE3D = {
+  /** Diamètre visé du foyer (tuiles). */
+  pitTiles: 0.8,
+  flameCount: 24,
+  smokeCount: 6,
+  /** Taille des particules (m, atténuée par la distance). */
+  flameSize: 0.7,
+  smokeSize: 0.7,
+  /** Hauteur des flammes (m) = lerp(min, max, ratio). */
+  flameHeightMin: 0.5,
+  flameHeightMax: 1.4,
+  flameRadius: 0.32,
+  emberRadius: 0.3,
+  emberHeight: 0.12,
 } as const;
 
 /** Couleurs des barres du calque (identiques à la 2D). */
@@ -166,6 +252,11 @@ export const BAR_COLORS = {
   clean: "#57b45a",
   cleanActive: "#7ee081",
   slot: "#f0b43c",
+  fire: "#ff9a3c",
+  fireLow: "#e53935",
+  fireOut: "#8a8a8a",
+  /** Jauge d'arrêt avant alimentation du feu (même teinte que l'accueil). */
+  feed: "#ffd23f",
 } as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -224,7 +315,13 @@ export const LIGHT = {
 } as const;
 
 /** Brouillard : de `near` à `far` m, repoussé si la caméra est plus loin (le joueur reste net). */
-export const FOG = { near: 30, far: 60, clearance: 12 } as const;
+export const FOG = {
+  near: 30,
+  far: 60,
+  clearance: 12,
+  /** Lighting.fogTint ≥ tintBlend ⇒ brouillard « teinte » pur ; en dessous, fondu depuis celui du jour. */
+  tintBlend: 0.08,
+} as const;
 
 export const QUALITY = {
   pixelRatioCoarse: 1.5,
@@ -241,8 +338,18 @@ export const ANIM = {
   maxDtS: 0.1,
   bounceMs: 350,
   popMs: 300,
-  messyTiltRad: (5 * Math.PI) / 180,
-  messyDarken: 0.75,
+  messyTiltRad: (10 * Math.PI) / 180,
+  messyDarken: 0.7,
+  /** Toile affaissée (échelles du modèle). */
+  messyScaleY: 0.55,
+  messyScaleX: 1.1,
+  /** Sac de couchage devant la porte (+Z) : décalage (m), lacet (rad), longueur visée (m). */
+  bedrollOffset: [0.3, 1.2] as const,
+  bedrollYaw: 0.7,
+  bedrollLength: 1.3,
+  /** Bulle « Zz » des dormeurs : rythme (Hz) et amplitude (fraction de tuile). */
+  zzHz: 0.6,
+  zzRise: 0.18,
   shakeAmplitudeRad: 0.04,
   shakeHz: 9,
   pulseHz: 1.6,
@@ -273,11 +380,16 @@ export const OVERLAY = {
   bushRegrowBarHeight: 1.1,
   tentBarHeight: 2.3,
   tentAlertRise: 0.5,
+  fireBarHeight: 1.9,
+  zzSize: 0.3,
+  coldLabelSize: 0.2,
   slotLabelHeight: 0.5,
   dropLabelHeight: 0.9,
   fxTextHeight: 1.9,
   /** Barre d'accueil : décalée vers le bas du tapis (fraction de tuile). */
   welcomeBarOffsetTiles: 0.35,
+  /** Jauge d'arrêt près du feu : au sol, décalée vers l'avant de la tuile du feu (fraction de tuile). */
+  feedBarOffsetTiles: 0.45,
   /** Tailles de texte (fraction de tilePx) et décalages verticaux (fraction de tilePx). */
   alertSize: 0.4,
   slotCostSize: 0.32,

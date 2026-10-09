@@ -1,8 +1,9 @@
 // Point d'entrée navigateur : câble rendu, HUD, entrées, sauvegarde, menu et boucle de jeu.
 // Démarrage asynchrone : le verrou multi-onglets (Web Locks) répond de façon asynchrone avant le
 // chargement de la sauvegarde (cf. src/app/save-controller.ts).
-// Rendu : 2D par défaut ; `?render=3d` charge À LA DEMANDE (import dynamique) le prototype three.js,
-// avec repli automatique en 2D (WebGL absent, modèles en échec, délai dépassé, contexte perdu).
+// Rendu : 3D par défaut, chargée À LA DEMANDE (import dynamique : three.js est un chunk séparé), avec
+// repli automatique en 2D (WebGL absent, modèles en échec, délai dépassé, contexte perdu).
+// `?render=2d` force le Canvas 2D : ni le chunk three ni aucun modèle n'est alors téléchargé.
 import "./styles/main.css";
 import { startGame } from "./app/game";
 import { createInput } from "./app/input";
@@ -12,7 +13,8 @@ import { bootSave } from "./app/save-controller";
 import { watchScreenInsets } from "./app/screen-insets";
 import { createRenderer, type Renderer } from "./render/renderer";
 import { isRender3DError, type Render3DFailure } from "./render/render3d-errors";
-import { createHud } from "./ui/hud";
+import { createDawnReport } from "./ui/dawn-report";
+import { createHud, type Hud } from "./ui/hud";
 import { createJoystick } from "./ui/joystick";
 import { createLoadingScreen } from "./ui/loading";
 import { createMenu } from "./ui/menu";
@@ -73,7 +75,22 @@ async function main(): Promise<void> {
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   const joystick = createJoystick(canvas, app);
   const input = createInput(window, joystick);
-  const hud = createHud(hudRoot, coarsePointer);
+  const baseHud = createHud(hudRoot, coarsePointer);
+  const dawnRoot = byId<HTMLDivElement>("dawn-report");
+  const dawnReport = createDawnReport(dawnRoot);
+  // HUD + bilan de l'aube : tous deux lisent l'état à chaque image (DOM touché seulement si ça change).
+  const hud: Hud = {
+    update(state) {
+      baseHud.update(state);
+      dawnReport.update(state);
+    },
+    // Appelé par game.replaceState (chargement, import, nouvelle partie) : un bilan déjà fermé dans
+    // l'ancienne partie doit pouvoir s'afficher de nouveau.
+    reset() {
+      baseHud.reset?.();
+      dawnReport.reset();
+    },
+  };
   const notices = createNotices(byId<HTMLDivElement>("notices"));
 
   // Hôte de rendu : permet le repli 2D à chaud si le contexte WebGL est perdu en jeu.
@@ -133,12 +150,13 @@ async function main(): Promise<void> {
       replaceBlockedReason: () => save.replaceBlockedReason(),
     },
     // Jeu et HUD inertes pendant le dialogue (les notifications restent annoncées).
-    [canvas, hudRoot],
+    [canvas, hudRoot, dawnRoot],
   );
 
-  // Zones couvertes par le HUD et le bouton Menu : le calque 3D n'y dessine pas de libellés.
+  // Zones couvertes par le HUD, le bouton Menu et le bilan de l'aube : le calque 3D n'y dessine pas
+  // de libellés.
   const renderHost = host;
-  watchScreenInsets(canvas, hudRoot, menuRoot, (insets) => renderHost.setScreenInsets(insets));
+  watchScreenInsets(canvas, hudRoot, menuRoot, (insets) => renderHost.setScreenInsets(insets), [dawnRoot]);
 
   save.attach({
     game,

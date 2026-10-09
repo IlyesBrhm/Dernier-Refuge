@@ -25,7 +25,7 @@ body {
   touch-action: none;
 }
 
-/* Rendu 3D (?render=3d) : canvas WebGL inséré avant #game, même boîte, ne capte aucun geste. */
+/* Rendu 3D (par défaut) : canvas WebGL inséré avant #game, même boîte, ne capte aucun geste. */
 #app > canvas.webgl {
   position: absolute;
   inset: 0;
@@ -120,6 +120,145 @@ body {
 .hud-value {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- Jour / nuit, feu de camp ------------------------------------------------------------- */
+
+.hud-day {
+  align-items: center;
+}
+
+.hud-sky {
+  flex: none;
+  display: block;
+}
+
+.hud-fire {
+  align-items: center;
+}
+
+.hud-meter {
+  width: 56px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.hud-meter-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 4px;
+  background: #ff9a3c;
+}
+
+.hud-fire.is-low .hud-meter-fill {
+  background: #e53935;
+}
+
+.hud-fire.is-low .hud-value {
+  color: #ff8a80;
+}
+
+.hud-fire.is-out .hud-meter-fill {
+  background: #8a8a8a;
+}
+
+.hud-fire.is-out .hud-value {
+  color: #c0c0c0;
+}
+
+.hud-sleepers[hidden] {
+  display: none;
+}
+
+.hud-alert {
+  padding: 5px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Région live toujours présente (annonces fiables), sans emprise quand elle est vide. */
+.hud-alert.is-empty {
+  padding: 0;
+}
+
+.hud-alert.is-low {
+  background: rgba(200, 40, 30, 0.88);
+}
+
+.hud-alert.is-out {
+  background: rgba(40, 60, 120, 0.9);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hud-alert.is-low {
+    animation: hud-pulse 1.2s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes hud-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.7;
+  }
+}
+
+.dawn-report {
+  position: absolute;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  z-index: 22;
+  transform: translateX(-50%);
+  width: min(320px, calc(100% - 24px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(40, 30, 50, 0.9);
+  border: 1px solid rgba(255, 210, 160, 0.45);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.dawn-report[hidden] {
+  display: none;
+}
+
+.dawn-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: #ffd9a0;
+}
+
+.dawn-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.dawn-close {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  background: #4a3a5a;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.dawn-close:focus-visible {
+  outline: 3px solid #ffd23f;
+  outline-offset: 2px;
 }
 
 .hud-help {
@@ -362,9 +501,79 @@ body {
   font-size: 14px;
 }
 
+.hud-help[hidden] {
+  display: none;
+}
+
+/* Abréviation des libellés : visible seulement sur écran étroit (cf. labelEl dans src/ui/hud.ts). */
+.hud-label-short {
+  display: none;
+}
+
+/*
+ * Écran étroit (téléphone en portrait) : HUD compact, 2 lignes de pastilles (+ alerte éventuelle),
+ * ~12 % de la hauteur en 390 × 844. Libellés abrégés et plafonds de stockage (« / 9999 ») masqués
+ * VISUELLEMENT seulement : les lecteurs d'écran lisent toujours le texte complet. Le HUD occupe toute
+ * la largeur à gauche du bouton Menu (marges asymétriques : la place compte plus que le centrage).
+ */
 @media (max-width: 480px) {
+  #hud {
+    left: calc(6px + env(safe-area-inset-left));
+    right: 58px;
+    gap: 4px;
+  }
+
+  .hud-bar {
+    gap: 3px;
+  }
+
   .hud-stat {
+    gap: 4px;
     font-size: 13px;
-    padding: 5px 8px;
+    padding: 4px 6px;
+    border-radius: 8px;
+  }
+
+  .hud-sky {
+    width: 15px;
+    height: 15px;
+  }
+
+  .hud-meter {
+    width: 40px;
+    height: 7px;
+  }
+
+  .hud-label-full,
+  .hud-stat-minor-cap .hud-cap {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .hud-label-short {
+    display: inline;
+  }
+
+  .hud-alert {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .hud-alert.is-empty {
+    padding: 0;
+  }
+
+  .hud-help {
+    font-size: 11px;
+    padding: 2px 6px;
   }
 }

@@ -1,43 +1,59 @@
-// Génération UNIQUE des fixtures figées de sauvegarde v1 (tests/save/fixtures/).
+// Génération UNIQUE des fixtures figées de sauvegarde (tests/save/fixtures/).
 //
-// Ces fichiers ne doivent JAMAIS être régénérés : ils représentent des sauvegardes déjà présentes chez
-// les joueurs. Si fixture-v1.test.ts casse après un changement du core ou de MAP_LAYOUT, c'est qu'il faut
-// une nouvelle version de sauvegarde + une migration (et une fixture v2), pas une nouvelle fixture v1.
+// Ces fichiers ne doivent JAMAIS être régénérés une fois commités : ils représentent des sauvegardes déjà
+// présentes chez les joueurs. Si un test de fixture casse après un changement du core / de la carte, c'est
+// qu'il faut une NOUVELLE version de sauvegarde + une migration + une nouvelle fixture, pas une
+// régénération.
 //
-// Comment elles ont été produites (une fois, le 2026-10-08, sur la branche feature/save, puis commit) :
+// --- Fixtures v1 (générateur RETIRÉ) ---------------------------------------------------------------
+// v1-initial.json et v1-midgame.json ont été produites une fois, le 2026-10-08 (branche feature/save),
+// par l'ancien générateur v1 : createInitialState(4242) et midgame(4242), savedAt = 1 760 000 000 000,
+// seed 4242, encodées en version 1. Depuis la v2 (jour/nuit), encodeSave écrit la version 2 et la carte
+// a changé : le générateur ne peut plus les reproduire. Elles sont GELÉES et testées par
+// fixture-v1.test.ts (chargement via la migration v1 → v2, état attendu vérifié).
+//
+// --- Fixtures v2 ------------------------------------------------------------------------------------
+// - v2-initial.json : createInitialState(4242).
+// - v2-night.json   : nightState(4242) (tests/save/helpers.ts) : bot « attentif » (entretient le feu)
+//                     jusqu'au premier tick ≥ 2900 de la nuit 1 avec feu allumé, ≥ 1 dormeur et
+//                     night.woodBurned > 0.
+// - v2-dawn.json    : bot attentif jusqu'au tick 3601 (lendemain de l'aube, bilan de nuit non nul).
+// Toutes : savedAt = 1 760 000 000 000, seed = 4242.
+// Commande (une fois, puis commit) :
 //   UPDATE_SAVE_FIXTURES=1 npx vitest run tests/save/fixture-generate.test.ts
-// - v1-initial.json : createInitialState(4242), savedAt = 1 760 000 000 000, seed = 4242.
-// - v1-midgame.json : midgame(4242) de tests/save/helpers.ts : bot « utile » (botGoal/steer de
-//   tests/core/helpers.ts) qui joue uniquement par commandes, jusqu'au premier tick ≥ 600 réunissant
-//   drops au sol, nœud épuisé, survivant au repos, survivant en marche, file non vide, emplacement
-//   construit et emplacement partiellement payé (atteint au tick 925) ; puis une commande setMoveInput
-//   sans tick (commandsThisTick = 1, input ≠ 0). Même savedAt et seed.
 //
 // Garde-fous :
-// - UPDATE_SAVE_FIXTURES=1     : crée les fixtures ABSENTES ; lève une erreur si un fichier existe déjà.
+// - UPDATE_SAVE_FIXTURES=1     : crée les fixtures v2 ABSENTES ; lève une erreur si l'une existe déjà
+//                                (rien n'est écrit dans ce cas).
 // - UPDATE_SAVE_FIXTURES=force : écrase (à ne faire que pour une fixture jamais publiée/commitée).
 // - CHECK_SAVE_FIXTURES=1      : n'écrit rien ; vérifie que le générateur reproduit à l'identique les
-//   fichiers commités (preuve que la procédure ci-dessus est bien celle qui les a produits).
-// Sans variable d'environnement, ce fichier ne fait rien (tests ignorés).
+//                                fixtures v2 commitées.
+// Sans variable d'environnement, ce fichier ne fait rien (tests ignorés). Les fixtures v1 ne sont jamais
+// écrites par ce fichier.
 
 import { createInitialState, type GameState } from "../../src/core/index";
 import { encodeSave } from "../../src/save/index";
-// Texte brut, exactement tel que commité (import Vite `?raw`).
-import V1_INITIAL from "./fixtures/v1-initial.json?raw";
-import V1_MIDGAME from "./fixtures/v1-midgame.json?raw";
-import { features, midgame, SAVED_AT, SEED } from "./helpers";
+import { attentiveUntil, nightState, SAVED_AT, SEED } from "./helpers";
 
 // Pas de @types/node dans le projet : accès minimal typé à la main.
 interface NodeFs {
   existsSync(p: URL): boolean;
   mkdirSync(p: URL, o: { recursive: boolean }): void;
   writeFileSync(p: URL, data: string): void;
+  readFileSync(p: URL, enc: "utf8"): string;
 }
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const UPDATE = env.UPDATE_SAVE_FIXTURES;
 const WRITE_ENABLED = UPDATE === "1" || UPDATE === "force";
 const FORCE = UPDATE === "force";
 const CHECK_ENABLED = env.CHECK_SAVE_FIXTURES === "1";
+
+/** Fixtures v2 et l'état qui les produit (calcul paresseux : coûteux). */
+const V2_FIXTURES: Readonly<Record<string, () => GameState>> = {
+  "v2-initial.json": () => createInitialState(SEED),
+  "v2-night.json": () => nightState(SEED),
+  "v2-dawn.json": () => attentiveUntil(3601, SEED),
+};
 
 /** Encode exactement comme à la génération (même seed, même savedAt). */
 function encodeFixture(state: GameState): string {
@@ -46,37 +62,41 @@ function encodeFixture(state: GameState): string {
   return enc.text;
 }
 
-describe("génération des fixtures v1 (UPDATE_SAVE_FIXTURES=1|force seulement)", () => {
-  it.runIf(WRITE_ENABLED)("écrit v1-initial.json et v1-midgame.json (refuse d'écraser sans force)", async () => {
-    const fsModule = "node:fs";
-    const fs = (await import(/* @vite-ignore */ fsModule)) as NodeFs;
+async function nodeFs(): Promise<NodeFs> {
+  const fsModule = "node:fs";
+  return (await import(/* @vite-ignore */ fsModule)) as NodeFs;
+}
+
+const urlOf = (name: string): URL => new URL(`./fixtures/${name}`, import.meta.url);
+
+describe("génération des fixtures v2 (UPDATE_SAVE_FIXTURES=1|force seulement)", () => {
+  it.runIf(WRITE_ENABLED)("écrit les fixtures v2 absentes (refuse d'écraser sans force)", async () => {
+    const fs = await nodeFs();
     fs.mkdirSync(new URL("./fixtures/", import.meta.url), { recursive: true });
-    const states = { "v1-initial.json": createInitialState(SEED), "v1-midgame.json": midgame(SEED) };
+    const names = Object.keys(V2_FIXTURES);
+    if (names.some((n) => !n.startsWith("v2-"))) throw new Error("seules les fixtures v2 sont générables");
     // Vérification AVANT toute écriture : pas d'écriture partielle si un seul fichier existe.
-    const files = Object.keys(states).map((name) => ({ name, url: new URL(`./fixtures/${name}`, import.meta.url) }));
-    const existing = files.filter((f) => fs.existsSync(f.url)).map((f) => f.name);
+    const existing = names.filter((n) => fs.existsSync(urlOf(n)));
     if (existing.length > 0 && !FORCE) {
       throw new Error(
-        `Fixture(s) déjà présente(s) : ${existing.join(", ")}. Une fixture v1 ne se régénère JAMAIS ` +
+        `Fixture(s) déjà présente(s) : ${existing.join(", ")}. Une fixture commitée ne se régénère JAMAIS ` +
           `(elle représente des sauvegardes de joueurs). Pour vérifier sans écrire : CHECK_SAVE_FIXTURES=1. ` +
           `Pour écraser malgré tout (fixture jamais publiée) : UPDATE_SAVE_FIXTURES=force.`,
       );
     }
-    for (const [name, state] of Object.entries(states)) {
+    for (const name of names) {
+      const state = V2_FIXTURES[name]!();
       const text = encodeFixture(state);
-      const file = new URL(`./fixtures/${name}`, import.meta.url);
-      console.log(`${fs.existsSync(file) ? "ÉCRASE (force)" : "crée"} ${name} (${text.length} car.)`, features(state));
-      fs.writeFileSync(file, text);
+      console.log(`${fs.existsSync(urlOf(name)) ? "ÉCRASE (force)" : "crée"} ${name} (tick ${state.tick}, ${text.length} car.)`);
+      fs.writeFileSync(urlOf(name), text);
     }
-  });
+  }, 60_000);
 });
 
-describe("reproductibilité des fixtures v1 (CHECK_SAVE_FIXTURES=1 seulement, n'écrit rien)", () => {
-  it.runIf(CHECK_ENABLED)("encodeSave(createInitialState(SEED)) === v1-initial.json commité", () => {
-    expect(encodeFixture(createInitialState(SEED))).toBe(V1_INITIAL);
-  });
-
-  it.runIf(CHECK_ENABLED)("encodeSave(midgame(SEED)) === v1-midgame.json commité", () => {
-    expect(encodeFixture(midgame(SEED))).toBe(V1_MIDGAME);
-  });
+describe.runIf(CHECK_ENABLED)("reproductibilité des fixtures v2 (CHECK_SAVE_FIXTURES=1 seulement, n'écrit rien)", () => {
+  it.each(Object.keys(V2_FIXTURES))("le générateur reproduit %s commité", async (name) => {
+    const fs = await nodeFs();
+    expect(fs.existsSync(urlOf(name)), `${name} absente`).toBe(true);
+    expect(encodeFixture(V2_FIXTURES[name]!())).toBe(fs.readFileSync(urlOf(name), "utf8"));
+  }, 60_000);
 });

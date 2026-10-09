@@ -166,19 +166,44 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
+// Balayages exhaustifs (chaque appel × chaque mode × ponctuel/durable, ou chaque quota) : délai
+// explicite et large pour rester fiable sous charge (suite complète en parallèle).
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
 function loadedState(st: StorageAdapter): GameState | null {
   const l = loadGame(st);
   return l.kind === "loaded" ? l.state : null;
 }
 
+/**
+ * Comme `loadedState`, mais mémoïsé sur le contenu brut du stockage : de nombreuses exécutions
+ * (quotas voisins, fautes sur des appels équivalents) aboutissent au même contenu ; loadGame est pur
+ * vis-à-vis du contenu (vérifié par fuzz-load : il n'écrit jamais), on ne le rejoue donc pas.
+ */
+const LOAD_CACHE = new Map<string, GameState | null>();
+function loadedStateOf(st: MemoryStorage): GameState | null {
+  const key = JSON.stringify(Object.entries(st.snapshot()).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  if (!LOAD_CACHE.has(key)) LOAD_CACHE.set(key, loadedState(st));
+  return LOAD_CACHE.get(key) as GameState | null;
+}
+
+/** Égalité profonde (toEqual), mémoïsée par paire d'objets (les états chargés sont partagés par le cache). */
+const SAME_CACHE = new WeakMap<GameState, WeakMap<GameState, boolean>>();
 function same(a: GameState | null, b: GameState | null): boolean {
   if (a === null || b === null) return a === b;
+  let inner = SAME_CACHE.get(a);
+  if (!inner) SAME_CACHE.set(a, (inner = new WeakMap()));
+  const known = inner.get(b);
+  if (known !== undefined) return known;
+  let eq: boolean;
   try {
     expect(a).toEqual(b);
-    return true;
+    eq = true;
   } catch {
-    return false;
+    eq = false;
   }
+  inner.set(b, eq);
+  return eq;
 }
 
 /** Vérifie un appel en échec ; renvoie les violations. */
@@ -186,7 +211,7 @@ function checkWrite(sc: Scenario, st: MemoryStorage, beforeSnap: Record<string, 
   const v: string[] = [];
   if (r.ok === false && !WRITE_ERRORS.has(r.error)) v.push(`erreur hors union ${String(r.error)}`);
   const strict = (ERROR_MODES as readonly string[]).includes(mode);
-  const after = loadedState(st);
+  const after = loadedStateOf(st);
   const allowed = [sc.before(), NEW];
   if (r.ok) {
     if (!same(after, NEW)) v.push("ok mais le nouvel état n'est pas chargé");

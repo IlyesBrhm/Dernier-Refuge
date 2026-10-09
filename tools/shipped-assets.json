@@ -12,13 +12,24 @@
     "forest/Grass_2_A_Color1": {},
     "forest/Bush_2_A_Color1": {},
     "survival/tent-canvas": {},
-    "survival/tent-canvas-half": {},
+    "survival/campfire-pit": {},
+    "survival/bedroll": {},
     "characters/Knight": {},
     "characters/Mage": {},
     "characters/Ranger": {},
     "characters/Rogue": {},
     "characters/Rogue_Hooded": {},
-    "animations/Rig_Medium_General": { "clips": ["Idle_A", "Interact", "Use_Item"] },
-    "animations/Rig_Medium_MovementBasic": { "clips": ["Walking_A"] }
+    "animations/Rig_Medium_General": {
+      "clips": [
+        "Idle_A",
+        "Interact",
+        "Use_Item"
+      ]
+    },
+    "animations/Rig_Medium_MovementBasic": {
+      "clips": [
+        "Walking_A"
+      ]
+    }
   }
 }

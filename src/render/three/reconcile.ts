@@ -5,7 +5,10 @@ import type * as THREE from "three";
 import type { DropResource } from "../../core";
 import { POOLS, type CharacterModel } from "./config";
 import { hash32, hashUnit } from "./hash";
-import type { SceneFrame, SceneItem, SceneKey } from "./scene-model";
+import type { SceneItem as AnySceneItem, FireItem, SceneFrame, SceneKey } from "./scene-model";
+
+/** Le feu (unique) a sa propre vue persistante (views/fire-view.ts), hors réconciliation. */
+type SceneItem = Exclude<AnySceneItem, FireItem>;
 import { CharacterView } from "./views/character-view";
 import { DropView } from "./views/drop-view";
 import type { FrameContext, ViewKit } from "./views/kit";
@@ -113,6 +116,7 @@ export function createReconciler(parent: THREE.Object3D, kit: ViewKit): Reconcil
     sync(frame, ctx): void {
       gen++;
       for (const item of frame.items) {
+        if (item.type === "fire") continue;
         let view = views.get(item.key);
         if (view && !matches(view, item)) {
           release(view);

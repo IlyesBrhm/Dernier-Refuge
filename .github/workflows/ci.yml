@@ -7,6 +7,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,14 +18,14 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      # Vérifie que le générateur reproduit exactement les fixtures v1 figées (sans rien écrire).
+      # Vérifie que le générateur reproduit exactement les fixtures de sauvegarde v2 figées (sans rien écrire).
       - run: npx vitest run tests/save/fixture-generate.test.ts
         env:
           CHECK_SAVE_FIXTURES: "1"
       # Les modèles 3D livrés (public/assets/) ne doivent pas dépasser 4 Mo.
       - run: npm run assets:size
       - run: npm run build
-      # Tests de bout en bout (2D par défaut, 3D via ?render=3d, repli 2D sans WebGL).
+      # Tests de bout en bout (3D par défaut, 2D via ?render=2d, replis 2D, jour/nuit, budget de draw calls).
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
       - uses: actions/upload-artifact@v4

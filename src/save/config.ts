@@ -6,7 +6,9 @@
  * BUILD.slotCosts, des nœuds : la carte n'est pas sérialisée) ⇒ CURRENT_VERSION++, une migration
  * `migrations[N-1]`, un nouveau schéma et une nouvelle fixture `vN` (les anciennes restent testées).
  */
-export const CURRENT_VERSION = 1;
+export const CURRENT_VERSION = 2;
+// Historique : v1 = Jalon 2 (save.md) ; v2 = jour/nuit (fire, night, statut `sleeping`, tuile F en (9,5),
+// docs/design/day-night.md §2.2).
 
 export const SAVE_CONFIG = {
   keyPrefix: "dernier-refuge.",

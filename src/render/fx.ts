@@ -6,7 +6,27 @@
 // - Quantité et ressource lues dans NODES[kind] ; « stock plein » via le sélecteur isStockFull du core.
 //   Rien n'est écrit dans l'état.
 
-import { isStockFull, tileCenter, tileOf, type DropResource, type GameState, type Vec } from "../core";
+//
+// Jour/nuit (docs/design/day-night.md §4.4-4.5) :
+// - bûche volante joueur → feu à chaque bois versé : bois versé = Δfire.wood + Δfire.burnedTotal ;
+// - dormeur qui part (sleeping → leaving) : de nuit « Froid ! » bleuté, de jour (aube) doré ; montant = bois
+//   réellement déposé devant la tente ce tick (repli : COLD_REWARD / DAWN_REWARD du core).
+
+import {
+  COLD_REWARD,
+  DAWN_REWARD,
+  doorOf,
+  isNight,
+  isStockFull,
+  sameTile,
+  tileCenter,
+  tileOf,
+  type DropResource,
+  type GameState,
+  type SurvivorStatus,
+  type TilePos,
+  type Vec,
+} from "../core";
 import { NODES } from "../data/balance";
 import { drawResourceIcon, RESOURCE_STYLE } from "./icons";
 
@@ -21,13 +41,25 @@ const MAX_FX = 16;
 
 const TEXT_COLOR_OK = "#fff6c8";
 const TEXT_COLOR_GROUNDED = "#d9d9d9";
+const TEXT_COLOR_GOLD = "#ffd23f";
+const TEXT_COLOR_COLD = "#9fd3ff";
 const TEXT_STROKE = "rgba(0, 0, 0, 0.75)";
+
+/** Teinte d'un texte flottant : doré (paiement de l'aube), bleuté (départ au froid). */
+export type FxTone = "gold" | "cold";
 
 interface HarvestFx {
   active: boolean;
   start: number;
   fromX: number;
   fromY: number;
+  /** Cible fixe (bûche versée au feu) au lieu du joueur. */
+  fixedTarget: boolean;
+  toX: number;
+  toY: number;
+  /** Vol seul, sans texte (bûche versée au feu). */
+  flyOnly: boolean;
+  tone: FxTone | null;
   /**
    * Butin resté au sol (stock plein, rien crédité) : pas de vol (le drop est déjà dessiné par le
    * renderer), seulement le texte gris ancré sur la tuile du drop.
@@ -71,12 +103,27 @@ export interface FxTextSample {
   text: string;
   /** Texte grisé (stock plein). */
   muted: boolean;
+  /** Teinte particulière (jour/nuit) ; absente = couleur normale. */
+  tone?: FxTone | null;
 }
 
 export type FxSample = FxFlySample | FxTextSample;
 
 /** Couleurs du texte flottant (partagées avec le calque de la 3D). */
-export const FX_TEXT_COLORS = { ok: TEXT_COLOR_OK, muted: TEXT_COLOR_GROUNDED, stroke: TEXT_STROKE } as const;
+export const FX_TEXT_COLORS = {
+  ok: TEXT_COLOR_OK,
+  muted: TEXT_COLOR_GROUNDED,
+  gold: TEXT_COLOR_GOLD,
+  cold: TEXT_COLOR_COLD,
+  stroke: TEXT_STROKE,
+} as const;
+
+/** Couleur de remplissage d'un texte flottant. */
+export function fxTextColor(s: FxTextSample): string {
+  if (s.tone === "gold") return TEXT_COLOR_GOLD;
+  if (s.tone === "cold") return TEXT_COLOR_COLD;
+  return s.muted ? TEXT_COLOR_GROUNDED : TEXT_COLOR_OK;
+}
 /** Hauteur de départ du texte flottant (tuiles) : la 3D l'ancre à hauteur de tête et n'ajoute que la montée. */
 export const FX_TEXT_START_TILES = TEXT_START_TILES;
 
@@ -95,6 +142,22 @@ export interface FxLayer {
   activeCount(): number;
   /** Efface tous les effets (l'état a été remplacé : chargement, import, nouvelle partie). */
   reset(): void;
+}
+
+/** Porte de la tente qu'occupait le survivant `id` dans `prev` (là où son paiement est déposé). */
+function departureDoor(prev: Readonly<GameState>, id: number): TilePos | null {
+  const s = prev.survivors.find((x) => x.id === id);
+  if (!s || s.tentId === null) return null;
+  const tent = prev.tents.find((t) => t.id === s.tentId);
+  return tent ? doorOf(tent.tile) : null;
+}
+
+/** Variation du bois au sol sur la tuile `t` entre `prev` et `curr` (drops fusionnés par tuile). */
+function woodDropDelta(prev: Readonly<GameState>, curr: Readonly<GameState>, t: TilePos): number {
+  let delta = 0;
+  for (const d of curr.drops) if (d.resource === "wood" && sameTile(tileOf(d.pos), t)) delta += d.amount;
+  for (const d of prev.drops) if (d.resource === "wood" && sameTile(tileOf(d.pos), t)) delta -= d.amount;
+  return delta;
 }
 
 export function createFxLayer(): FxLayer {
@@ -117,8 +180,15 @@ export function createFxLayer(): FxLayer {
       groundY: 0,
       resource: "wood",
       text: "",
+      fixedTarget: false,
+      toX: 0,
+      toY: 0,
+      flyOnly: false,
+      tone: null,
     });
   }
+  /** Statuts des survivants au tick précédent (détection sleeping → leaving), réutilisé. */
+  const prevStatus = new Map<number, SurvivorStatus>();
   let fontPx = -1;
   let fontStr = "";
 
@@ -155,6 +225,9 @@ export function createFxLayer(): FxLayer {
     fx.groundX = ground.x;
     fx.groundY = ground.y;
     fx.resource = resource;
+    fx.fixedTarget = false;
+    fx.flyOnly = false;
+    fx.tone = null;
     if (!fullAfter) {
       fx.grounded = false;
       fx.muted = false;
@@ -173,6 +246,44 @@ export function createFxLayer(): FxLayer {
     }
   }
 
+  /** Bûche versée au feu : vol du joueur vers le foyer, sans texte. */
+  function spawnFeed(from: Vec, to: Vec, nowMs: number): void {
+    const fx = acquire();
+    fx.active = true;
+    fx.start = nowMs;
+    fx.fromX = from.x;
+    fx.fromY = from.y;
+    fx.fixedTarget = true;
+    fx.toX = to.x;
+    fx.toY = to.y;
+    fx.groundX = to.x;
+    fx.groundY = to.y;
+    fx.flyOnly = true;
+    fx.grounded = false;
+    fx.muted = false;
+    fx.tone = null;
+    fx.resource = "wood";
+    fx.text = "";
+  }
+
+  /** Texte immédiat ancré au sol (départ d'un dormeur). */
+  function spawnText(at: Vec, text: string, tone: FxTone, nowMs: number): void {
+    const fx = acquire();
+    fx.active = true;
+    fx.start = nowMs - LOOT_MS;
+    fx.fromX = at.x;
+    fx.fromY = at.y;
+    fx.fixedTarget = false;
+    fx.flyOnly = false;
+    fx.grounded = true;
+    fx.groundX = at.x;
+    fx.groundY = at.y;
+    fx.muted = false;
+    fx.tone = tone;
+    fx.resource = "wood";
+    fx.text = text;
+  }
+
   return {
     onTick(prev, curr, nowMs): void {
       const n = curr.nodes.length;
@@ -181,6 +292,37 @@ export function createFxLayer(): FxLayer {
         const p = prev.nodes[i];
         if (!c || !p || p.id !== c.id) continue;
         if (p.status === "ready" && c.status === "depleted") spawn(prev, curr, c.kind, tileCenter(c.tile), nowMs);
+      }
+
+      // Bois versé au feu ce tick = variation de la réserve + bois brûlé au même pas (lecture seule).
+      const fed = curr.fire.wood - prev.fire.wood + (curr.fire.burnedTotal - prev.fire.burnedTotal);
+      if (fed > 0 && curr.resources.wood < prev.resources.wood) {
+        spawnFeed(curr.player.pos, tileCenter(curr.map.fire), nowMs);
+      }
+
+      // Dormeurs qui partent : la cause vient des compteurs du bilan de nuit tenus par le core
+      // (`state.night.coldLeavers` / `sleepersPaid`, remis à zéro au crépuscule ⇒ si un compteur
+      // recule, sa variation est sa nouvelle valeur). Le froid (nuit) et le paiement (pas de l'aube)
+      // ne tombent jamais au même tick ; si aucun compteur ne bouge (état incohérent / importé), repli
+      // sur la phase : de nuit = froid, de jour = paiement de l'aube.
+      prevStatus.clear();
+      for (const s of prev.survivors) prevStatus.set(s.id, s.status);
+      const delta = (a: number, b: number): number => (b >= a ? b - a : b);
+      const coldDelta = delta(prev.night.coldLeavers, curr.night.coldLeavers);
+      const paidDelta = delta(prev.night.sleepersPaid, curr.night.sleepersPaid);
+      const cold = coldDelta > 0 && paidDelta === 0 ? true : paidDelta > 0 && coldDelta === 0 ? false : isNight(curr.tick);
+      for (const s of curr.survivors) {
+        if (s.status !== "leaving" || prevStatus.get(s.id) !== "sleeping") continue;
+        const night = cold;
+        // Montant réellement déposé : variation du bois au sol devant la porte de sa tente (drop
+        // créé ou fusionné ce tick) ; repli sur la constante du core si le drop n'est pas lisible
+        // (ramassé au même tick, tente introuvable).
+        const door = departureDoor(prev, s.id);
+        const deposited = door ? woodDropDelta(prev, curr, door) : 0;
+        const amount = deposited > 0 ? deposited : night ? COLD_REWARD : DAWN_REWARD;
+        const at = tileCenter(door ?? tileOf(s.pos));
+        if (night) spawnText(at, `Froid ! +${amount}`, "cold", nowMs);
+        else spawnText(at, `+${amount}`, "gold", nowMs);
       }
     },
 
@@ -214,7 +356,7 @@ export function createFxLayer(): FxLayer {
           ctx.lineWidth = Math.max(2, tilePx * 0.06);
           ctx.strokeStyle = TEXT_STROKE;
           ctx.strokeText(s.text, x, y);
-          ctx.fillStyle = s.muted ? TEXT_COLOR_GROUNDED : TEXT_COLOR_OK;
+          ctx.fillStyle = fxTextColor(s);
           ctx.fillText(s.text, x, y);
           ctx.globalAlpha = 1;
         }
@@ -238,12 +380,12 @@ export function createFxLayer(): FxLayer {
       const fx = pool[i] as HarvestFx;
       if (!fx.active) continue;
       const t = Math.max(0, nowMs - fx.start);
-      if (t >= TOTAL_MS) {
+      if (t >= (fx.flyOnly ? LOOT_MS : TOTAL_MS)) {
         fx.active = false;
         continue;
       }
-      const toX = fx.grounded ? fx.groundX : player.x;
-      const toY = fx.grounded ? fx.groundY : player.y;
+      const toX = fx.fixedTarget ? fx.toX : fx.grounded ? fx.groundX : player.x;
+      const toY = fx.fixedTarget ? fx.toY : fx.grounded ? fx.groundY : player.y;
       if (t < LOOT_MS) {
         // Vol en arc : position linéaire + bosse sinusoïdale, lissage smoothstep.
         const k = t / LOOT_MS;
@@ -264,6 +406,7 @@ export function createFxLayer(): FxLayer {
         s.alpha = 1 - k * k;
         s.text = fx.text;
         s.muted = fx.muted;
+        s.tone = fx.tone;
         out.push(s);
       }
     }

@@ -1,9 +1,9 @@
 // Utilitaires des tests de sauvegarde (pas un fichier de test).
 
-import { applyCommand, checkInvariants, tick, type GameState } from "../../src/core/index";
+import { applyCommand, checkInvariants, CYCLE_TICKS, isNight, tick, type GameState } from "../../src/core/index";
 import { canonicalStringify, computeChecksum, CURRENT_VERSION, SAVE_CONFIG } from "../../src/save/index";
 import type { SaveOwner } from "../../src/save/index";
-import { botGoal, fresh, steer } from "../core/helpers";
+import { attentiveFireGoal, botGoal, fresh, steer } from "../core/helpers";
 
 export const SEED = 4242;
 export const SAVED_AT = 1_760_000_000_000;
@@ -33,6 +33,58 @@ export function botStep(s: GameState): GameState {
     cur = r.state;
   }
   return tick(cur);
+}
+
+/** Comme `botStep`, mais le bot entretient le feu (bot « attentif » de tests/core/helpers.ts). */
+export function attentiveStep(s: GameState): GameState {
+  const want = steer(s, attentiveFireGoal(s) ?? botGoal(s));
+  let cur = s;
+  if (want.dx !== s.player.input.dx || want.dy !== s.player.input.dy) {
+    const r = applyCommand(s, { type: "setMoveInput", ...want });
+    if (!r.ok) throw new Error(`commande refusée ${r.error}`);
+    cur = r.state;
+  }
+  return tick(cur);
+}
+
+/** Bot attentif depuis createInitialState(seed) jusqu'au tick `until` exactement. */
+export function attentiveUntil(until: number, seed = SEED): GameState {
+  let s = fresh(seed);
+  while (s.tick < until) s = attentiveStep(s);
+  return s;
+}
+
+/** Une nuit « riche » : feu allumé, ≥ 1 dormeur, du bois déjà brûlé cette nuit. */
+export function isRichNight(s: GameState): boolean {
+  return (
+    isNight(s.tick) &&
+    s.fire.wood > 0 &&
+    s.night.woodBurned > 0 &&
+    s.survivors.some((v) => v.status === "sleeping")
+  );
+}
+
+/**
+ * État de nuit déterministe (fixture v2-night) : bot attentif, seed SEED, premier tick ≥ 2900 de la
+ * nuit 1 qui satisfait `isRichNight`. Lève s'il n'y en a pas avant l'aube.
+ */
+export function nightState(seed = SEED): GameState {
+  let s = attentiveUntil(2900, seed);
+  while (!isRichNight(s)) {
+    if (s.tick >= CYCLE_TICKS - 1) throw new Error("aucune nuit riche trouvée");
+    s = attentiveStep(s);
+  }
+  return s;
+}
+
+/**
+ * Transforme un état courant en état brut v1 (sans `map`, `fire`, `night`) pour fabriquer des
+ * sauvegardes v1 synthétiques. L'appelant doit garantir que l'état est valide en v1 (aucun `sleeping`).
+ */
+export function toV1Raw(s: GameState): Record<string, unknown> {
+  const { map: _m, fire: _f, night: _n, ...rest } = s;
+  if (rest.survivors.some((v) => v.status === "sleeping")) throw new Error("`sleeping` n'existe pas en v1");
+  return JSON.parse(JSON.stringify(rest)) as Record<string, unknown>;
 }
 
 /**

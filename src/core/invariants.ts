@@ -2,6 +2,8 @@
 
 import {
   BUILD,
+  COLD,
+  FIRE,
   LIMITS,
   MAP_LAYOUT,
   NODES,
@@ -9,9 +11,11 @@ import {
   PLAYER,
   QUEUE,
   RESOURCES,
+  SLEEP,
   STARTING_RESOURCES,
   SURVIVOR,
   TENT,
+  TIME,
   WELCOME,
   WORLD,
   type NodeKind,
@@ -20,6 +24,8 @@ import { hitboxBlocked } from "./collision";
 import { maxRegrowDelay } from "./harvest-rules";
 import { isWalkable, parseMap, referenceMap, sameTile, tileAt, tileCenter, tileOf } from "./map";
 import type { GameState, ResourceId, Survivor, TilePos, Vec } from "./state";
+import { isInFeedZone } from "./systems/fire";
+import { countBurnTicks, cyclePos, isNight, nightStartTick } from "./time";
 
 const PARSED_LAYOUT = parseMap(MAP_LAYOUT);
 /** Carte de référence (instance unique gelée, cf. referenceMap). */
@@ -75,13 +81,71 @@ function atCenter(p: Vec, t: TilePos): boolean {
 export function heldTotal(state: GameState, resource: ResourceId): number {
   let total = state.resources[resource];
   for (const d of state.drops) if (d.resource === resource) total += d.amount;
-  if (resource === "wood") for (const b of state.buildSlots) total += b.paid;
+  if (resource === "wood") {
+    for (const b of state.buildSlots) total += b.paid;
+    // Bois versé au feu : en réserve ou déjà brûlé (docs/design/day-night.md §5).
+    total += state.fire.wood + state.fire.burnedTotal;
+  }
   return total;
 }
 
-/** Plafond plausible de `heldTotal` au tick courant : départ + tick × PLAUSIBILITY.<res>PerTick. */
+/**
+ * Plafond plausible de `heldTotal` au tick courant : départ + tick × PLAUSIBILITY.<res>PerTick
+ * (+ réserve initiale du feu pour le bois).
+ */
 export function plausibleMax(state: GameState, resource: ResourceId): number {
-  return STARTING_RESOURCES[resource] + state.tick * plausiblePerTick(resource);
+  const base = STARTING_RESOURCES[resource] + state.tick * plausiblePerTick(resource);
+  return resource === "wood" ? base + FIRE.initialWood : base;
+}
+
+/** Plafond de la récompense d'un départ au froid. */
+const COLD_REWARD_MAX = Math.floor(SURVIVOR.woodReward / COLD.rewardDivisor);
+/** Plafond de la récompense d'un dormeur payé à l'aube. */
+const DAWN_REWARD_MAX = SURVIVOR.woodReward + SLEEP.dawnBonus;
+
+/** Feu et bilan de la nuit (docs/design/day-night.md §5). */
+function checkFireAndNight(state: GameState, err: (m: string) => void): void {
+  const tickOk = isInt(state.tick) && state.tick >= 0;
+  const fire = state.fire;
+  if (!isInt(fire.wood) || fire.wood < 0 || fire.wood > FIRE.capacity) err(`fire.wood hors bornes: ${fire.wood}`);
+  const maxBurned = tickOk ? countBurnTicks(1, state.tick) * FIRE.burnPerStep : 0;
+  if (!isInt(fire.burnedTotal) || fire.burnedTotal < 0 || fire.burnedTotal > maxBurned) {
+    err(`fire.burnedTotal hors bornes: ${fire.burnedTotal} (max ${maxBurned})`);
+  }
+  // Délai d'arrêt avant alimentation : entier borné ; > 0 seulement si le joueur est dans la zone
+  // (l'input peut avoir changé par commande depuis le dernier tick : il n'est pas contraint ici).
+  if (!isInt(fire.feedProgress) || fire.feedProgress < 0 || fire.feedProgress > FIRE.feedDelayTicks) {
+    err(`fire.feedProgress hors bornes: ${fire.feedProgress} (max ${FIRE.feedDelayTicks})`);
+  } else if (fire.feedProgress > 0 && !isInFeedZone(state.map.fire, tileOf(state.player.pos))) {
+    err(`fire.feedProgress ${fire.feedProgress} > 0 hors de la zone d'alimentation`);
+  }
+
+  const n = state.night;
+  const fields = [n.coldLeavers, n.sleepersPaid, n.woodEarned, n.woodBurned];
+  if (!fields.every((v) => isInt(v) && v >= 0)) {
+    err(`night: compteurs invalides (${fields.map(String).join(", ")})`);
+    return;
+  }
+  if (!tickOk) return;
+  if (state.tick < TIME.dayTicks && fields.some((v) => v !== 0)) err("night: bilan non nul avant la première nuit");
+  // Borne supérieure (décision utilisateur, Q3) : égalité en jeu honnête.
+  const maxEarned = n.coldLeavers * COLD_REWARD_MAX + n.sleepersPaid * DAWN_REWARD_MAX;
+  if (n.woodEarned > maxEarned) err(`night.woodEarned ${n.woodEarned} > ${maxEarned} possible`);
+  if (isNight(state.tick)) {
+    if (n.sleepersPaid !== 0) err(`night.sleepersPaid ${n.sleepersPaid} pendant la nuit`);
+    const maxBurnedNight = countBurnTicks(nightStartTick(state.tick), state.tick) * FIRE.burnPerStep;
+    if (n.woodBurned > maxBurnedNight) err(`night.woodBurned ${n.woodBurned} > ${maxBurnedNight} possible cette nuit`);
+  } else if (state.tick >= TIME.dayTicks) {
+    if (n.sleepersPaid > state.tents.length) err(`night.sleepersPaid ${n.sleepersPaid} > ${state.tents.length} tentes`);
+    const lastNightStart = state.tick - cyclePos(state.tick) - TIME.nightTicks;
+    const maxBurnedNight =
+      countBurnTicks(lastNightStart, lastNightStart + TIME.nightTicks - 1) * FIRE.burnPerStep;
+    if (n.woodBurned > maxBurnedNight) err(`night.woodBurned ${n.woodBurned} > ${maxBurnedNight} possible par nuit`);
+  }
+  if (n.woodBurned > fire.burnedTotal) err(`night.woodBurned ${n.woodBurned} > fire.burnedTotal ${fire.burnedTotal}`);
+  if (isInt(state.nextId) && n.coldLeavers + n.sleepersPaid >= state.nextId) {
+    err(`night: ${n.coldLeavers + n.sleepersPaid} départs ≥ nextId ${state.nextId}`);
+  }
 }
 
 export function checkInvariants(state: GameState): string[] {
@@ -148,6 +212,10 @@ export function checkInvariants(state: GameState): string[] {
       }
     }
   }
+  if (!sameTile(state.map.fire, REF_MAP.fire)) err("carte: feu de camp absent ou déplacé");
+
+  // Feu de camp et bilan de la nuit.
+  checkFireAndNight(state, err);
 
   // Drops : dans la carte, au plus un par (tuile, ressource).
   // Pas d'exigence « tuile praticable » : l'aimantation (systems/pickup.ts) déplace le drop en ligne droite
@@ -221,9 +289,14 @@ export function checkInvariants(state: GameState): string[] {
   // Survivants ↔ tentes.
   const tentById = new Map(state.tents.map((t) => [t.id, t]));
   const usedTents = new Set<number>();
+  const nightNow = isInt(state.tick) && isNight(state.tick);
   for (const s of state.survivors) {
-    const needsTent = s.status === "walkingToTent" || s.status === "resting";
+    const needsTent = s.status === "walkingToTent" || s.status === "resting" || s.status === "sleeping";
     if (needsTent !== (s.tentId !== null)) err(`survivant ${s.id}: tentId incohérent avec ${s.status}`);
+    // Sommeil ↔ heure ↔ feu (docs/design/day-night.md §5).
+    if (s.status === "sleeping" && !nightNow) err(`survivant ${s.id}: endormi de jour`);
+    if (s.status === "sleeping" && state.fire.wood === 0) err(`survivant ${s.id}: endormi avec le feu éteint`);
+    if (s.status === "resting" && nightNow) err(`survivant ${s.id}: au repos (non endormi) la nuit`);
     if (
       s.status === "resting"
         ? !(isInt(s.restTicksLeft) && s.restTicksLeft > 0 && s.restTicksLeft <= SURVIVOR.restTicks)
@@ -255,7 +328,11 @@ export function checkInvariants(state: GameState): string[] {
     if (t.occupantId !== null) {
       if (occupants.has(t.occupantId)) err(`survivant ${t.occupantId} occupe plusieurs tentes`);
       occupants.add(t.occupantId);
-      if (byId.get(t.occupantId)?.tentId !== t.id) err(`tente ${t.id}: occupant ne la pointe pas`);
+      const occ = byId.get(t.occupantId);
+      if (occ?.tentId !== t.id) err(`tente ${t.id}: occupant ne la pointe pas`);
+      // assigned ⇔ occupant en route ; occupied ⇔ occupant au repos ou endormi.
+      const expected = t.status === "occupied" ? ["resting", "sleeping"] : ["walkingToTent"];
+      if (occ && !expected.includes(occ.status)) err(`tente ${t.id} (${t.status}): occupant au statut ${occ.status}`);
     }
     // Atteindre TENT.cleanTicks libère la tente et remet à 0 dans le même tick ; seule une tente
     // en désordre a une progression non nulle.
@@ -331,8 +408,8 @@ export function checkInvariants(state: GameState): string[] {
  * - le survivant se déplace axialement entre centres de tuiles : s'il a un chemin, il est aligné sur un
  *   axe avec le centre de path[0], à une distance dans ]0, 1 tuile] ; sa tuile courante est praticable ;
  * - destination selon le statut : toQueue ⇒ sa place de file (chemin non vide) ; queued ⇒ au centre de
- *   sa place, chemin vide ; walkingToTent ⇒ sa tente (chemin non vide) ; resting ⇒ au centre de sa
- *   tente, chemin vide ; leaving ⇒ l'entrée (ou chemin vide, retiré au tick suivant).
+ *   sa place, chemin vide ; walkingToTent ⇒ sa tente (chemin non vide) ; resting / sleeping ⇒ au
+ *   centre de sa tente, chemin vide ; leaving ⇒ l'entrée (ou chemin vide, retiré au tick suivant).
  */
 function checkSurvivorPath(state: GameState, s: Survivor, err: (m: string) => void): void {
   const tag = `survivant ${s.id}`;
@@ -373,7 +450,10 @@ function checkSurvivorPath(state: GameState, s: Survivor, err: (m: string) => vo
       if (tent && (!last || !sameTile(last, tent.tile))) err(`${tag}: en route mais pas vers sa tente`);
       break;
     case "resting":
-      if (tent && (s.path.length > 0 || !atCenter(s.pos, tent.tile))) err(`${tag}: au repos hors de sa tente`);
+    case "sleeping":
+      if (tent && (s.path.length > 0 || !atCenter(s.pos, tent.tile))) {
+        err(`${tag}: ${s.status === "resting" ? "au repos" : "endormi"} hors de sa tente`);
+      }
       break;
     case "leaving":
       if (last && !sameTile(last, state.map.entrance)) err(`${tag}: part mais pas vers l'entrée`);

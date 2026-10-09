@@ -1,7 +1,7 @@
 // Tests des utilitaires de fixture : `edit` ne touche jamais `tick` ; `editPlausible` ne l'avance
 // que si nécessaire, au minimum, et jamais à la baisse.
 
-import { PLAUSIBILITY, RESOURCES, STARTING_RESOURCES } from "../../src/data/balance";
+import { FIRE, PLAUSIBILITY, RESOURCES, STARTING_RESOURCES } from "../../src/data/balance";
 import { checkInvariants } from "../../src/core/invariants";
 import { tileCenter } from "../../src/core/map";
 import { edit, editPlausible, fresh, plausibleTick, run } from "./helpers";
@@ -33,6 +33,9 @@ describe("helpers de fixture", () => {
 
   it("editPlausible avance tick au minimum nécessaire (bois, nourriture, drops compris)", () => {
     const wood = editPlausible(fresh(), (d) => void (d.resources.wood = RESOURCES.cap));
+    // Détenu (stock + réserve du feu) − plafond au tick 0 (départ + réserve initiale du feu) :
+    // la réserve du feu, intacte, s'annule (docs/design/day-night.md §5).
+    expect(wood.fire.wood).toBe(FIRE.initialWood);
     const expectedWood = Math.ceil((RESOURCES.cap - STARTING_RESOURCES.wood) / PLAUSIBILITY.woodPerTick);
     expect(wood.tick).toBe(expectedWood);
     expect(plausibilityErrors(wood)).toEqual([]);

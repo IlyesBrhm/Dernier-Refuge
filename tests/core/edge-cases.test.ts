@@ -9,7 +9,7 @@ import { doorOf, sameTile, tileCenter, tileOf } from "../../src/core/map";
 import { stepBudget } from "../../src/core/loop-budget";
 import type { GameState, TilePos } from "../../src/core/state";
 import { tick } from "../../src/core/tick";
-import { deepFreeze, edit, editPlausible, expectValid, fresh, move, place, run, runUntil, steer, withHeadQueued } from "./helpers";
+import { deepFreeze, edit, editPlausible, editPlausibleDay, expectValid, fresh, move, place, run, runUntil, steer, withHeadQueued } from "./helpers";
 
 const onTile = (s: GameState, t: TilePos): boolean => sameTile(tileOf(s.player.pos), t);
 const paidTotal = (s: GameState): number => s.buildSlots.reduce((a, b) => a + b.paid, 0);
@@ -177,7 +177,8 @@ describe("cas limites — stock et drops au plafond", () => {
     const base = place(withHeadQueued(), fresh().map.welcome);
     const resting = runUntil(run(base, WELCOME.ticks), (st) => st.tents[0]!.status === "occupied", 300);
     // État simulé + drop gonflé : editPlausible, la conservation est vérifiée par chaque test (woodTotal).
-    return editPlausible(resting, (d) => {
+    // Ramené au jour si besoin : un survivant `resting` n'existe que le jour (day-night.md §5).
+    return editPlausibleDay(resting, (d) => {
       d.drops.push({ id: d.nextId++, pos: tileCenter(doorOf(d.tents[0]!.tile)), resource: "wood", amount });
     });
   }

@@ -1,0 +1,356 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.1.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 621,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 294,
+      "normalized": false,
+      "byteOffset": 1242,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 310,
+      "max": [
+        32767,
+        8581,
+        31759
+      ],
+      "min": [
+        -32767,
+        -8581,
+        -31759
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 310,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 310,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 145,
+      "max": [
+        32767,
+        16005,
+        29531
+      ],
+      "min": [
+        -32767,
+        -16005,
+        -29531
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 145,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 145,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1830,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 325,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 915
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1832,
+      "byteLength": 2480,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 328,
+          "byteLength": 1799,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 310
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4312,
+      "byteLength": 2480,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2128,
+          "byteLength": 745,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 310
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 6792,
+      "byteLength": 1240,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2876,
+          "byteLength": 531,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 310
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 8032,
+      "byteLength": 1160,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3408,
+          "byteLength": 925,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 145
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 9192,
+      "byteLength": 1160,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4336,
+          "byteLength": 403,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 145
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 10352,
+      "byteLength": 580,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4740,
+          "byteLength": 338,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 145
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9728,
+      "minFilter": 9984,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "colormap",
+      "mimeType": "image/webp",
+      "uri": "colormap.webp"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "campfire-pit.bin",
+      "byteLength": 5080
+    },
+    {
+      "byteLength": 10932,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "colormap",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0,
+          "extensions": {
+            "KHR_texture_transform": {
+              "texCoord": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "campfire-pit",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 2,
+            "NORMAL": 3,
+            "TEXCOORD_0": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    },
+    {
+      "name": "wood",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 1
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "campfire-pit",
+      "children": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "wood",
+      "translation": [
+        -0.00110860611,
+        0.06229118067794227,
+        0.0128750633
+      ],
+      "scale": [
+        0.09576430916786194,
+        0.09576430916786194,
+        0.09576430916786194
+      ],
+      "mesh": 1
+    },
+    {
+      "translation": [
+        0,
+        0.03636252135038376,
+        0
+      ],
+      "scale": [
+        0.1388842910528183,
+        0.1388842910528183,
+        0.1388842910528183
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "campfire-pit",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization",
+    "KHR_texture_transform"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization"
+  ]
+}

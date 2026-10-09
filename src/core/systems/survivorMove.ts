@@ -28,7 +28,7 @@ function advance(s: Survivor, speed: number): void {
 
 export function mutateSurvivorMove(draft: GameState): void {
   for (const s of draft.survivors) {
-    if (s.status === "resting") continue;
+    if (s.status === "resting" || s.status === "sleeping") continue;
     advance(s, SURVIVOR.speed);
     if (s.status === "toQueue" && s.path.length === 0) s.status = "queued";
   }

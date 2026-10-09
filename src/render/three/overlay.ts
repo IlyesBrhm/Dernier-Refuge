@@ -6,14 +6,24 @@
 
 import * as THREE from "three";
 import { drawBar, drawLabel, fontFor } from "../canvas-kit";
-import { FX_TEXT_COLORS, FX_TEXT_START_TILES, type FxSample } from "../fx";
+import { FX_TEXT_COLORS, FX_TEXT_START_TILES, fxTextColor, type FxSample } from "../fx";
 import type { ScreenInsets } from "../renderer";
-import { BAR_COLORS, OVERLAY, TILE_METERS, toMeters } from "./config";
+import { welcomeBlockLines } from "../welcome-block";
+import { ANIM, BAR_COLORS, OVERLAY, TILE_METERS, toMeters } from "./config";
 import type { SceneFrame } from "./scene-model";
 
 export interface Overlay {
-  /** Dessine le calque de l'image ; `welcomeAt` = centre du tapis d'accueil (m). */
-  draw(frame: SceneFrame, fx: readonly FxSample[], camera: THREE.Camera, welcomeAt: { x: number; z: number } | null): void;
+  /**
+   * Dessine le calque de l'image ; `welcomeAt` = centre du tapis d'accueil (m) ; `nowMs` = horloge
+   * d'affichage (animation des bulles « Zz »).
+   */
+  draw(
+    frame: SceneFrame,
+    fx: readonly FxSample[],
+    camera: THREE.Camera,
+    welcomeAt: { x: number; z: number } | null,
+    nowMs: number,
+  ): void;
   clear(): void;
   /** Zones couvertes par le DOM : aucun libellé / barre dont l'emprise (et pas seulement l'ancrage) les touche. */
   setInsets(insets: ScreenInsets): void;
@@ -173,7 +183,7 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
       clear();
     },
 
-    draw(frame, fx, camera, welcomeAt): void {
+    draw(frame, fx, camera, welcomeAt, nowMs): void {
       resizeIfNeeded();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -216,7 +226,18 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
           }
           case "tent": {
             const pivot = groundY(camera, item.x, item.z);
-            if (item.status === "occupied" && item.rest !== null) {
+            if (item.status === "occupied" && item.sleeping) {
+              // Dormeur : bulle « Zz » qui monte doucement (aucune barre : il paiera à l'aube).
+              if (project(camera, item.x, OVERLAY.tentBarHeight, item.z)) {
+                const k = ((nowMs / 1000) * ANIM.zzHz) % 1;
+                const dy = -k * ANIM.zzRise * tilePx;
+                if (!labelCovered("Zz", OVERLAY.zzSize, dy)) {
+                  ctx.globalAlpha = 0.55 + 0.45 * Math.sin(Math.PI * k);
+                  label("Zz", OVERLAY.zzSize, dy);
+                  ctx.globalAlpha = 1;
+                }
+              }
+            } else if (item.status === "occupied" && item.rest !== null) {
               if (project(camera, item.x, OVERLAY.tentBarHeight, item.z)) {
                 bar(item.rest, BAR_COLORS.rest, OVERLAY.regrowBarWidthRatio, pivot);
               }
@@ -266,6 +287,21 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
             if (!labelCovered(text, OVERLAY.dropAmountSize)) label(text, OVERLAY.dropAmountSize);
             break;
           }
+          case "fire": {
+            // Jauge d'arrêt (délai avant alimentation), au sol devant le feu comme celle de l'accueil.
+            if (
+              item.feed !== null &&
+              project(camera, item.x, 0, item.z + TILE_METERS * OVERLAY.feedBarOffsetTiles)
+            ) {
+              bar(item.feed, BAR_COLORS.feed, OVERLAY.regrowBarWidthRatio);
+            }
+            // Barre du feu : joueur dans la zone d'alimentation, ou feu qui faiblit.
+            if (!item.playerNear && !item.low) break;
+            if (!project(camera, item.x, OVERLAY.fireBarHeight, item.z)) break;
+            const color = !item.lit ? BAR_COLORS.fireOut : item.low ? BAR_COLORS.fireLow : BAR_COLORS.fire;
+            bar(item.ratio, color, OVERLAY.barWidthRatio, groundY(camera, item.x, item.z));
+            break;
+          }
           case "character":
             break;
         }
@@ -277,6 +313,26 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
         project(camera, welcomeAt.x, 0, welcomeAt.z + TILE_METERS * OVERLAY.welcomeBarOffsetTiles)
       ) {
         bar(frame.welcome.ratio, BAR_COLORS.welcome);
+      }
+      // Accueil fermé (core : welcomeBlockReason) : « Feu éteint » ou « Fermé / jusqu'à l'aube » sur le tapis.
+      const blockLines = welcomeBlockLines(frame.welcome.blockReason);
+      if (blockLines.length > 0 && welcomeAt && project(camera, welcomeAt.x, 0.3, welcomeAt.z)) {
+        const lineH = Math.max(11, Math.round(tilePx * OVERLAY.coldLabelSize)) * 1.15;
+        const y0 = pt.y - ((blockLines.length - 1) * lineH) / 2;
+        const covered = blockLines.some((t, i) => labelCovered(t, OVERLAY.coldLabelSize, y0 + i * lineH - pt.y));
+        if (!covered) {
+          ctx.font = fontFor(tilePx, OVERLAY.coldLabelSize);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.lineJoin = "round";
+          ctx.lineWidth = Math.max(2, tilePx * 0.06);
+          ctx.strokeStyle = FX_TEXT_COLORS.stroke;
+          ctx.fillStyle = FX_TEXT_COLORS.cold;
+          blockLines.forEach((t, i) => {
+            ctx.strokeText(t, pt.x, y0 + i * lineH);
+            ctx.fillText(t, pt.x, y0 + i * lineH);
+          });
+        }
       }
 
       // Textes flottants de récolte (le butin en vol est en 3D, cf. loot-fx.ts).
@@ -301,7 +357,7 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
         ctx.lineWidth = Math.max(OVERLAY.fxStrokeMinPx, tilePx * OVERLAY.fxStrokeRatio);
         ctx.strokeStyle = FX_TEXT_COLORS.stroke;
         ctx.strokeText(s.text, pt.x, y);
-        ctx.fillStyle = s.muted ? FX_TEXT_COLORS.muted : FX_TEXT_COLORS.ok;
+        ctx.fillStyle = fxTextColor(s);
         ctx.fillText(s.text, pt.x, y);
         ctx.globalAlpha = 1;
       }

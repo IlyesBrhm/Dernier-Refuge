@@ -1,18 +1,47 @@
-// Prototype de rendu 3D (docs/design/render-3d.md §4.8, §4.9, §6.3). Projet Playwright « e2e ».
-// Chaque test a son propre contexte (stockage vide) : pas de bannière de sauvegarde héritée.
+// Rendu 3D par défaut et jour/nuit (docs/design/render-3d.md §6.3, docs/design/day-night.md §0 et
+// §6.4). Projet Playwright « e2e ». Chaque test a son propre contexte (stockage vide) : pas de
+// bannière de sauvegarde héritée.
+//
+// États jour/nuit : construits par le core (tests/e2e/daynight-scenario.ts, seed fixe, commandes +
+// ticks, invariants vérifiés), exportés avec src/save, importés par le menu dans un contexte neuf.
+// L'horloge de la page est gelée AVANT « Confirmer » : aucun tick n'est joué, la page affiche
+// exactement l'état importé (valeurs attendues = sélecteurs du core).
 
 import { expect, test } from "@playwright/test";
-import { hold, newGame, render3dInfo, waitFrames, waitReady, watch, WEBGL_LAUNCH } from "./helpers";
+import { BUDGET_KEYS, buildDayNightScenarios } from "./daynight-scenario";
+import {
+  canvasTexts,
+  expectHud,
+  expectWelcomeMat,
+  hold,
+  importState,
+  meanCanvasLuma,
+  newGame,
+  openWithState,
+  render3dInfo,
+  unfreezeClock,
+  waitFrames,
+  waitLoopTime,
+  waitReady,
+  watch,
+  WEBGL_LAUNCH,
+} from "./helpers";
 
 test.use(WEBGL_LAUNCH);
 
 const THREE_CHUNK = /\/assets\/three-[^/]*\.js(\?|$)/;
 const GLTF = /\.gltf(\?|$)/;
+const COLD_LABEL = "Feu éteint";
 
-test.describe("mode 3D (?render=3d)", () => {
-  test("démarre en 3D sans erreur, budget de draw calls, déplacement clavier", async ({ page }) => {
+/** Scénarios jour/nuit (pur, déterministe, ~0,3 s) : construits une fois par worker. */
+const SC = buildDayNightScenarios();
+
+// ================================================================================================
+
+test.describe("3D par défaut", () => {
+  test("/ ⇒ data-render=3d sans erreur, budget de draw calls, déplacement clavier", async ({ page }) => {
     const p = watch(page);
-    await page.goto("/?render=3d");
+    await page.goto("/");
     await waitReady(page);
     await expect(page.locator("#app")).toHaveAttribute("data-render", "3d");
     await expect(page.locator("canvas.webgl")).toHaveCount(1);
@@ -24,6 +53,11 @@ test.describe("mode 3D (?render=3d)", () => {
     expect(info.calls).toBeGreaterThan(0);
     expect(info.calls).toBeLessThan(120);
     expect(info.triangles).toBeLessThan(200_000);
+    // Nouvelle partie = lever du jour (tick 0 : aube, ombre du soleil, feu allumé).
+    expect(info.light).toBe("dawn");
+    expect(info.shadow).toBe("sun");
+    expect(info.fireLit).toBe(true);
+    await expect(page.locator("#hud .hud-day .hud-value")).toHaveText("Jour 1");
 
     // Déplacement : ZQSD (codes KeyW/KeyA/KeyS/KeyD) et flèches, ~1 s au total.
     for (const key of ["KeyD", "ArrowDown", "KeyA", "ArrowUp"]) await hold(page, key, 250);
@@ -32,9 +66,12 @@ test.describe("mode 3D (?render=3d)", () => {
     console.log(`[mesure] 3D après déplacement : ${JSON.stringify(after)}`);
     expect(after.calls).toBeLessThan(120);
 
-    // Le chunk three et des modèles ont bien été chargés.
+    // Le chunk three et des modèles ont bien été chargés (dont le feu de camp).
     expect(p.requests.some((u) => THREE_CHUNK.test(u))).toBe(true);
     expect(p.requests.some((u) => GLTF.test(u))).toBe(true);
+    expect(p.requests.some((u) => /campfire-pit\.gltf/.test(u))).toBe(true);
+    expect(p.requests.some((u) => /bedroll\.gltf/.test(u))).toBe(true);
+    expect(p.requests.some((u) => /tent-canvas-half/.test(u))).toBe(false);
 
     expect(p.pageErrors).toEqual([]);
     expect(p.consoleErrors).toEqual([]);
@@ -42,9 +79,17 @@ test.describe("mode 3D (?render=3d)", () => {
     await expect(page.locator(".notice-banner")).toBeHidden();
   });
 
+  test("?render=3d, ?render=3, ?render=webgl ⇒ 3D (toute valeur autre que 2d)", async ({ page }) => {
+    for (const q of ["/?render=3d", "/?render=3", "/?render=webgl"]) {
+      await page.goto(q);
+      await waitReady(page);
+      await expect(page.locator("#app"), q).toHaveAttribute("data-render", "3d");
+    }
+  });
+
   test("mémoire : géométries et textures identiques après 1 et après 5 « Nouvelle partie »", async ({ page }) => {
     const p = watch(page);
-    await page.goto("/?render=3d");
+    await page.goto("/");
     await waitReady(page);
     await waitFrames(page, 10);
     const initial = await render3dInfo(page);
@@ -67,10 +112,10 @@ test.describe("mode 3D (?render=3d)", () => {
   });
 });
 
-test.describe("mode 2D par défaut", () => {
-  test("/ ⇒ data-render=2d, aucun chunk three ni modèle .gltf demandé", async ({ page }) => {
+test.describe("2D forcée (?render=2d)", () => {
+  test("?render=2d ⇒ data-render=2d, aucun chunk three ni modèle .gltf demandé, pas de __render3d", async ({ page }) => {
     const p = watch(page);
-    await page.goto("/");
+    await page.goto("/?render=2d");
     await waitReady(page);
     await expect(page.locator("#app")).toHaveAttribute("data-render", "2d");
     await hold(page, "ArrowRight", 400);
@@ -84,16 +129,162 @@ test.describe("mode 2D par défaut", () => {
     expect(p.httpErrors).toEqual([]);
   });
 
-  test("?render=2d et valeurs inconnues ⇒ 2D", async ({ page }) => {
-    for (const q of ["/?render=2d", "/?render=3", "/?render=webgl"]) {
+  test("?render=2D (casse ignorée) et ?seed=7&render=2d ⇒ 2D, sans three", async ({ page }) => {
+    const p = watch(page);
+    for (const q of ["/?render=2D", "/?seed=7&render=2d"]) {
       await page.goto(q);
       await waitReady(page);
-      await expect(page.locator("#app")).toHaveAttribute("data-render", "2d");
+      await expect(page.locator("#app"), q).toHaveAttribute("data-render", "2d");
     }
+    expect(p.requests.filter((u) => THREE_CHUNK.test(u) || GLTF.test(u))).toEqual([]);
+  });
+
+  test("de nuit : écran nettement assombri (luminance moyenne) ; tapis « Fermé / jusqu'à l'aube » ou « Feu éteint » selon la raison ; toujours sans three", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const p = watch(page);
+    await openWithState(page, testInfo, "/?render=2d", SC.day);
+    await expect(page.locator("#app")).toHaveAttribute("data-render", "2d");
+    await expectHud(page, SC.day.expect, "2d day");
+    const day = await meanCanvasLuma(page);
+    await expectWelcomeMat(page, null, "2d day");
+
+    await importState(page, testInfo, SC.nightLit);
+    await expectHud(page, SC.nightLit.expect, "2d nightLit");
+    const nightLit = await meanCanvasLuma(page);
+    await expectWelcomeMat(page, null, "2d nightLit");
+
+    // Feu éteint après un départ au froid ⇒ « Fermé / jusqu'à l'aube » (raison coldLeavers).
+    await importState(page, testInfo, SC.nightOut);
+    expect(SC.nightOut.expect.blockReason).toBe("coldLeavers");
+    await expectHud(page, SC.nightOut.expect, "2d nightOut");
+    const nightOut = await meanCanvasLuma(page);
+    await expectWelcomeMat(page, "coldLeavers", "2d nightOut");
+
+    // Feu éteint sans départ au froid (personne ne dormait) ⇒ « Feu éteint » (raison fireOut).
+    await importState(page, testInfo, SC.nightFireOut);
+    expect(SC.nightFireOut.expect.blockReason).toBe("fireOut");
+    await expectHud(page, SC.nightFireOut.expect, "2d nightFireOut");
+    await expectWelcomeMat(page, "fireOut", "2d nightFireOut");
+    expect(await canvasTexts(page)).toContain(COLD_LABEL);
+
+    console.log(`[mesure] 2D luminance moyenne : jour ${day.toFixed(1)}, nuit feu allumé ${nightLit.toFixed(1)}, nuit feu éteint ${nightOut.toFixed(1)}`);
+    expect(day).toBeGreaterThan(40); // garde-fou : la mesure lit bien le canvas
+    expect(nightLit).toBeLessThan(day * 0.75);
+    expect(nightOut).toBeLessThan(day * 0.6);
+    // Le halo du feu éclaire : feu allumé plus clair que feu éteint.
+    expect(nightOut).toBeLessThan(nightLit);
+
+    expect(p.requests.filter((u) => THREE_CHUNK.test(u) || GLTF.test(u))).toEqual([]);
+    expect(p.pageErrors).toEqual([]);
+    expect(p.consoleErrors).toEqual([]);
   });
 });
 
-test.describe("repli en 2D", () => {
+test.describe("jour/nuit en 3D (états construits par le core, importés par le menu)", () => {
+  // Les 5 états du budget + la nuit feu éteint SANS départ au froid (« Feu éteint » sur le tapis).
+  for (const key of [...BUDGET_KEYS, "nightFireOut"] as const) {
+    test(`${key} (tick ${SC[key].state.tick}) : < 120 draw calls, ombre ${SC[key].expect.shadow}, lumière ${SC[key].expect.light}, HUD`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      const c = SC[key];
+      const p = watch(page);
+      await openWithState(page, testInfo, "/", c);
+      await expect(page.locator("#app")).toHaveAttribute("data-render", "3d");
+
+      const info = await render3dInfo(page);
+      console.log(`[mesure] 3D ${key} (tick ${c.state.tick}) : ${JSON.stringify(info)}`);
+      expect(info.calls).toBeGreaterThan(0);
+      expect(info.calls).toBeLessThan(120);
+      expect(info.triangles).toBeLessThan(200_000);
+      expect(info.shadow).toBe(c.expect.shadow);
+      expect(info.light).toBe(c.expect.light);
+      expect(info.fireLit).toBe(c.expect.fireLit);
+
+      await expectHud(page, c.expect, key);
+
+      // Libellé du tapis d'accueil selon welcomeBlockReason (joueur à côté de W) : « Feu éteint »
+      // (fireOut), « Fermé / jusqu'à l'aube » (coldLeavers, prioritaire), rien si l'accueil est ouvert.
+      await expectWelcomeMat(page, c.expect.blockReason, key);
+
+      expect(p.pageErrors).toEqual([]);
+      expect(p.consoleErrors).toEqual([]);
+      expect(p.httpErrors).toEqual([]);
+    });
+  }
+
+  test("nuit, feu qui faiblit : alerte « Le feu faiblit — n dormeur(s)… », jauge en rouge (is-low)", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const c = SC.nightLow;
+    const p = watch(page);
+    await openWithState(page, testInfo, "/", c);
+    expect(c.expect.fireLow).toBe(true);
+    await expectHud(page, c.expect, "nightLow");
+    await expect(page.locator("#hud .hud-alert")).toContainText("Le feu faiblit");
+    const info = await render3dInfo(page);
+    expect(info.calls).toBeLessThan(120);
+    expect(info.shadow).toBe("fire");
+    expect(info.fireLit).toBe(true);
+    expect(p.pageErrors).toEqual([]);
+  });
+
+  test("aube : bilan affiché UNE fois (role=status, bonnes valeurs) ; fermé, il ne revient pas pendant l'aube", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const c = SC.dawn;
+    const p = watch(page);
+    await openWithState(page, testInfo, "/", c);
+    const report = page.locator("#dawn-report");
+    await expectHud(page, c.expect, "dawn");
+    await expect(page.getByRole("status").filter({ hasText: "Nuit 1 terminée" })).toHaveCount(1);
+
+    await report.getByRole("button", { name: "Fermer", exact: true }).click();
+    await expect(report).toBeHidden();
+
+    // Le jeu reprend (≈ 2 s de temps de boucle ⇒ ~20 ticks, toujours l'aube, bilan inchangé) : le
+    // panneau reste fermé. Attente sur le temps vu par la boucle (images dessinées × delta borné),
+    // pas sur l'horloge réelle : sous charge, le même nombre de ticks est joué.
+    await unfreezeClock(page);
+    const played = await waitLoopTime(page, 2_000, 10);
+    expect(played.loopMs).toBeGreaterThanOrEqual(2_000);
+    await waitFrames(page, 5);
+    expect((await render3dInfo(page)).light).toBe("dawn");
+    await expect(report).toBeHidden();
+    expect(p.pageErrors).toEqual([]);
+    expect(p.consoleErrors).toEqual([]);
+  });
+
+  test("mémoire stable : géométries et textures identiques après deux tours des 5 états (imports successifs)", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const p = watch(page);
+    await openWithState(page, testInfo, "/", SC.day);
+    const rounds: { geometries: number; textures: number; maxCalls: number }[] = [];
+    for (let round = 0; round < 2; round++) {
+      let maxCalls = 0;
+      for (const key of BUDGET_KEYS) {
+        await importState(page, testInfo, SC[key]);
+        const info = await render3dInfo(page);
+        maxCalls = Math.max(maxCalls, info.calls);
+        expect(info.shadow, `${key} tour ${round + 1}`).toBe(SC[key].expect.shadow);
+      }
+      const info = await render3dInfo(page);
+      rounds.push({ geometries: info.geometries, textures: info.textures, maxCalls });
+    }
+    console.log(`[mesure] mémoire jour/nuit : ${JSON.stringify(rounds)}`);
+    expect(rounds[1]?.geometries).toBe(rounds[0]?.geometries);
+    expect(rounds[1]?.textures).toBe(rounds[0]?.textures);
+    for (const r of rounds) expect(r.maxCalls).toBeLessThan(120);
+    expect(p.pageErrors).toEqual([]);
+    expect(p.consoleErrors).toEqual([]);
+  });
+});
+
+test.describe("repli en 2D (depuis /, 3D par défaut)", () => {
   test("WebGL indisponible ⇒ 2D + bandeau « La 3D n'est pas disponible… », jeu jouable", async ({ page }) => {
     await page.addInitScript(() => {
       const orig = HTMLCanvasElement.prototype.getContext;
@@ -105,7 +296,7 @@ test.describe("repli en 2D", () => {
       };
     });
     const p = watch(page);
-    await page.goto("/?render=3d");
+    await page.goto("/");
     await waitReady(page);
     await expect(page.locator("#app")).toHaveAttribute("data-render", "2d");
     await expect(page.locator(".notice-banner .notice-text")).toHaveText(
@@ -132,7 +323,7 @@ test.describe("repli en 2D", () => {
   test("modèles .gltf en échec ⇒ 2D + bandeau « Les modèles 3D n'ont pas pu être chargés… »", async ({ page }) => {
     await page.route("**/*.gltf", (r) => r.abort());
     const p = watch(page);
-    await page.goto("/?render=3d");
+    await page.goto("/");
     await waitReady(page);
     await expect(page.locator("#app")).toHaveAttribute("data-render", "2d");
     await expect(page.locator(".notice-banner .notice-text")).toHaveText(
@@ -149,7 +340,7 @@ test.describe("repli en 2D", () => {
     page,
   }) => {
     const p = watch(page);
-    await page.goto("/?render=3d");
+    await page.goto("/");
     await waitReady(page);
     await expect(page.locator("#app")).toHaveAttribute("data-render", "3d");
     await waitFrames(page, 5);
@@ -199,7 +390,7 @@ test.describe("repli en 2D", () => {
     });
     const p = watch(page);
     const t0 = Date.now();
-    await page.goto("/?render=3d");
+    await page.goto("/");
     await waitReady(page, 60_000);
     const elapsed = Date.now() - t0;
     console.log(`[mesure] repli sur délai après ${elapsed} ms`);

@@ -11,7 +11,7 @@ Modèles 3D du rendu prototype (`?render=3d`). Tous les packs utilisés sont sou
 |---|---|---|---|---|
 | KayKit Adventurers 2.0 | Kay Lousberg | CC0 1.0 | <https://kaylousberg.itch.io/kaykit-adventurers> | Oui : joueur et survivants, animations Idle_A, Walking_A, Use_Item, Interact |
 | KayKit Forest Nature Pack 1.0 | Kay Lousberg | CC0 1.0 | <https://kaylousberg.itch.io/kaykit-forest> | Oui : arbres, rochers, buissons, herbe |
-| Survival Kit 2.0 | Kenney | CC0 1.0 | <https://kenney.nl/assets/survival-kit> | Oui : tentes uniquement |
+| Survival Kit 2.0 | Kenney | CC0 1.0 | <https://kenney.nl/assets/survival-kit> | Oui : tente, feu de camp, sac de couchage |
 | Stylized Nature MegaKit (Standard) | Quaternius | CC0 1.0 | <https://quaternius.com> | Non (aperçu seulement) |
 | Wolf (animé) | Quaternius | CC0 1.0 attendue, **à vérifier** sur la page de téléchargement | <https://quaternius.com> | Non (aperçu seulement) |
 

@@ -97,9 +97,9 @@ describe("autres versions", () => {
     expectRefused(resign(MID_TEXT, (_s, env) => void (env.version = 1.5)), "bad_envelope");
   });
 
-  it('comportement documenté : "version":1.0 écrit à la main est lu comme 1 (JSON) ⇒ accepté', () => {
-    // JSON.parse("1.0") === 1 : le checksum porte sur la valeur, pas sur le texte. Sans danger.
-    const t = MID_TEXT.replace(/"version":1}$/, '"version":1.0}');
+  it('comportement documenté : "version":2.0 écrit à la main est lu comme 2 (JSON) ⇒ accepté', () => {
+    // JSON.parse("2.0") === 2 : le checksum porte sur la valeur, pas sur le texte. Sans danger.
+    const t = MID_TEXT.replace(/"version":2}$/, '"version":2.0}');
     expect(t).not.toBe(MID_TEXT);
     expect(importSave(t)).toMatchObject({ ok: true });
   });
