@@ -13,13 +13,17 @@
     "coverage": "vitest run --coverage",
     "lint": "eslint .",
     "assets": "node tools/build-assets.mjs",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "e2e": "playwright test --project=e2e",
+    "captures": "playwright test --project=captures",
+    "assets:size": "node tools/check-assets-size.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@gltf-transform/core": "^4.1.1",
     "@gltf-transform/extensions": "^4.1.1",
     "@gltf-transform/functions": "^4.1.1",
+    "@playwright/test": "^1.48.2",
     "@types/three": "^0.170.0",
     "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.39.5",

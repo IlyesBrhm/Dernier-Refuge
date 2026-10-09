@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Stop / SubagentStop : si du code a été modifié depuis le dernier passage vert,
 // lance typecheck + lint + tests (ceux définis dans package.json). En cas d'échec, empêche Claude de s'arrêter et lui donne l'erreur.
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, statSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { readStdinJson, projectDir, audit } from "./lib.mjs";
@@ -12,6 +12,16 @@ const dirty = path.join(root, ".claude", "state", "dirty");
 
 if (!existsSync(dirty)) process.exit(0);
 if (input.stop_hook_active) process.exit(0); // évite une boucle infinie : un seul retour forcé
+// Date de modification de `dirty` avant les vérifications : si du code change pendant
+// qu'elles tournent, `dirty` est réécrit et ne doit pas être effacé.
+const dirtyStamp = (() => {
+  try {
+    return statSync(dirty).mtimeMs;
+  } catch {
+    return null;
+  }
+})();
+if (dirtyStamp === null) process.exit(0); // effacé entre-temps par une autre exécution
 if (!existsSync(path.join(root, "node_modules"))) {
   process.stderr.write("[harness] node_modules absent : lance `npm install` pour activer la barrière de tests.\n");
   process.exit(0);
@@ -31,6 +41,12 @@ for (const script of ["typecheck", "lint", "test"].filter((s) => s in scripts)) 
   }
 }
 
-unlinkSync(dirty);
+// Plusieurs Stop/SubagentStop peuvent tourner en parallèle : ne pas planter si une autre
+// exécution a déjà effacé `dirty` (ENOENT), et ne pas l'effacer s'il a été modifié depuis.
+try {
+  if (statSync(dirty).mtimeMs === dirtyStamp) rmSync(dirty, { force: true });
+} catch {
+  /* déjà effacé par une autre exécution : rien à faire */
+}
 audit(root, { hook: "test-gate", event: input.hook_event_name, agent: input.agent_type, ok: true });
 process.exit(0);

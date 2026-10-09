@@ -4,7 +4,7 @@
 // fournit les textes.
 
 /** Messages d'état persistants, du plus au moins prioritaire. */
-export const BANNER_PRIORITY = ["temporary", "quarantine", "notOwner", "unavailable", "corrupt"] as const;
+export const BANNER_PRIORITY = ["temporary", "quarantine", "notOwner", "unavailable", "corrupt", "render"] as const;
 export type BannerKey = (typeof BANNER_PRIORITY)[number];
 
 export interface BannerOptions {

@@ -5,8 +5,6 @@
 import {
   harvestTarget,
   isPlayerOn,
-  nodeHarvestRatio,
-  nodeRegrowRatio,
   slotRemaining,
   type GameState,
   type ResourceNode,
@@ -18,9 +16,12 @@ import {
   type Vec,
 } from "../core";
 import { SURVIVOR, TENT, WELCOME, WORLD, PLAYER } from "../data/balance";
+import { drawBar, drawLabel, fontFor } from "./canvas-kit";
 import { createFxLayer, type FxView } from "./fx";
 import { drawResourceIcon } from "./icons";
 import { interpolate } from "./interpolate";
+import { prevNodeOf, shownHarvestRatio, shownRegrowRatio } from "./ratios";
+import { BERRIES } from "./shapes";
 
 const U = WORLD.unitsPerTile;
 const MIN_TILE_PX = 44; // en px CSS : lisibilité au doigt sur mobile
@@ -85,18 +86,24 @@ const SURVIVOR_COLORS: Record<SurvivorStatus, string> = {
   leaving: "#9aa3a8",
 };
 
-/** Baies du buisson : décalages fixes (fraction de tuile) autour du centre. */
-const BERRIES: ReadonlyArray<readonly [number, number]> = [
-  [-0.17, -0.1],
-  [0.05, -0.2],
-  [0.2, -0.04],
-  [-0.06, 0.08],
-  [0.14, 0.16],
-  [-0.2, 0.17],
-];
-
 /** Décalage horizontal (fraction de tuile) quand bois et nourriture partagent une tuile. */
-const SHARED_DROP_OFFSET = 0.15;
+export const SHARED_DROP_OFFSET = 0.15;
+
+/** Rectangle en px CSS, relatif au canvas #game. */
+export interface ScreenRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Zones de l'écran couvertes par l'interface DOM (HUD, bouton Menu), mesurées par l'app. */
+export interface ScreenInsets {
+  /** Bas du HUD (px CSS depuis le haut du canvas) : rien n'est étiqueté au-dessus. */
+  safeTopPx: number;
+  /** Zones d'exclusion supplémentaires (ex. bouton Menu). */
+  exclude: readonly ScreenRect[];
+}
 
 export interface Renderer {
   /** À appeler une fois par tick simulé (détection d'événements visuels, ex. récolte). */
@@ -104,6 +111,10 @@ export interface Renderer {
   draw(prev: Readonly<GameState>, curr: Readonly<GameState>, alpha: number): void;
   /** Oublie les effets en cours (l'état vient d'être remplacé). */
   reset(): void;
+  /** Libère les ressources (GPU, écouteurs) avant remplacement par un autre renderer. Optionnel. */
+  dispose?(): void;
+  /** Zones couvertes par le DOM (libellés masqués dessous). Optionnel : le 2D les ignore. */
+  setScreenInsets?(insets: ScreenInsets): void;
 }
 
 export function createRenderer(canvas: HTMLCanvasElement): Renderer {
@@ -165,32 +176,16 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   };
 
   function font(sizeRatio: number, bold = true): string {
-    const px = Math.max(11, Math.round(tilePx * sizeRatio));
-    return `${bold ? "bold " : ""}${px}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    return fontFor(tilePx, sizeRatio, bold);
   }
 
   function label(text: string, x: number, y: number, sizeRatio = 0.3): void {
-    ctx.font = font(sizeRatio);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = Math.max(2, tilePx * 0.06);
-    ctx.strokeStyle = COLORS.textStroke;
-    ctx.strokeText(text, x, y);
-    ctx.fillStyle = COLORS.text;
-    ctx.fillText(text, x, y);
+    drawLabel(ctx, tilePx, text, x, y, sizeRatio);
   }
 
   /** Barre de progression centrée en (cx, y), ratio dans [0, 1]. */
   function bar(cx: number, y: number, ratio: number, color: string, widthRatio = 0.8): void {
-    const w = tilePx * widthRatio;
-    const h = Math.max(4, tilePx * 0.1);
-    const x = cx - w / 2;
-    const r = Math.min(1, Math.max(0, ratio));
-    ctx.fillStyle = COLORS.barBack;
-    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w * r, h);
+    drawBar(ctx, tilePx, cx, y, ratio, color, widthRatio);
   }
 
   function drawGround(state: Readonly<GameState>): void {
@@ -333,28 +328,6 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       ctx.strokeStyle = stroke;
       ctx.stroke();
     }
-  }
-
-  /** Nœud de même id dans l'état précédent (même index : liste statique triée par id). */
-  function prevNodeOf(prev: Readonly<GameState>, i: number, id: number): ResourceNode | undefined {
-    const p = prev.nodes[i];
-    return p && p.id === id ? p : undefined;
-  }
-
-  /** Avancement de récolte affiché, interpolé entre deux ticks quand il progresse. */
-  function shownHarvestRatio(p: ResourceNode | undefined, c: ResourceNode, a: number): number {
-    const r = nodeHarvestRatio(c);
-    if (!p || p.status !== "ready" || c.status !== "ready" || c.progress < p.progress) return r;
-    const r0 = nodeHarvestRatio(p);
-    return r0 + (r - r0) * a;
-  }
-
-  /** Avancement de repousse affiché (1 si prêt), interpolé entre deux ticks. */
-  function shownRegrowRatio(p: ResourceNode | undefined, c: ResourceNode, a: number): number {
-    const r = nodeRegrowRatio(c);
-    if (!p || p.status !== "depleted" || c.status !== "depleted") return r;
-    const r0 = nodeRegrowRatio(p);
-    return r0 + (r - r0) * a;
   }
 
   function drawTreeCrown(cx: number, cy: number, g: number): void {

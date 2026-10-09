@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["dist/", "coverage/", "node_modules/", "public/", "assets-src/"] },
+  { ignores: ["dist/", "coverage/", "node_modules/", "public/", "assets-src/", "assets-all/", "test-results/", "playwright-report/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -13,6 +13,18 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       eqeqeq: ["error", "always"],
+    },
+  },
+  {
+    // three.js n'est chargé qu'à la demande (?render=3d, import dynamique) : interdit hors de la couche 3D.
+    // (src/core a sa propre règle plus stricte ci-dessous.)
+    files: ["src/**/*.ts"],
+    ignores: ["src/render/three/**", "src/render/assets/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ group: ["three", "three/**"], message: "three uniquement dans src/render/three et src/render/assets (import dynamique)." }] },
+      ],
     },
   },
   {

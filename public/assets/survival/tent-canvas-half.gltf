@@ -1,0 +1,228 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.1.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 408,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 272,
+      "max": [
+        32755,
+        28699,
+        32767
+      ],
+      "min": [
+        -32755,
+        -28699,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 272,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 272,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 816,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 153,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 408
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 816,
+      "byteLength": 2176,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 156,
+          "byteLength": 1547,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 272
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 2992,
+      "byteLength": 2176,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1704,
+          "byteLength": 811,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 272
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5168,
+      "byteLength": 1088,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2516,
+          "byteLength": 478,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 272
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9728,
+      "minFilter": 9984,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "colormap",
+      "mimeType": "image/webp",
+      "uri": "colormap.webp"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "tent-canvas-half.bin",
+      "byteLength": 2996
+    },
+    {
+      "byteLength": 6256,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "colormap",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0,
+          "extensions": {
+            "KHR_texture_transform": {
+              "texCoord": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "tent-canvas-half",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "NORMAL": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "tent-canvas-half",
+      "translation": [
+        -1.4901161193847656e-8,
+        0.24568417575210333,
+        0.00550001859664917
+      ],
+      "scale": [
+        0.28050002455711365,
+        0.28050002455711365,
+        0.28050002455711365
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "tent-canvas-half",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization",
+    "KHR_texture_transform"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization"
+  ]
+}

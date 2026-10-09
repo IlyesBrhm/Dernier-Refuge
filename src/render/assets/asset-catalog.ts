@@ -1,7 +1,9 @@
 // ⚠ FICHIER GÉNÉRÉ par tools/build-assets.mjs (npm run assets) — ne pas éditer à la main.
-// Tous les packs sont sous licence CC0 (voir PACKS et public/assets/<pack>/LICENSE.txt).
+// Tous les packs sont sous licence CC0 (voir PACKS et assets-all/assets/<pack>/LICENSE.txt).
 // size : boîte englobante en unités du modèle (≈ mètres ; les échelles diffèrent selon les packs). y = hauteur.
 // kind : "static" (décor, bâtiments), "skinned" (personnage/créature animé), "animation" (clips seuls, pas de mesh).
+// shipped : livré dans le jeu (public/assets/, liste blanche tools/shipped-assets.json) ; sinon aperçu seulement
+// (assets-all/, servi par vite dev). clips = tous les clips (aperçu) ; shippedClips = clips livrés dans le jeu.
 
 export type AssetPack = "nature" | "forest" | "survival" | "characters" | "items" | "animations" | "creatures";
 export type AssetKind = "static" | "skinned" | "animation";
@@ -9,6 +11,7 @@ export type AssetCategory = "bush" | "berryBush" | "plant" | "tree" | "deadTree"
 
 export interface AssetEntry {
   readonly id: string;
+  readonly shipped: boolean;
   readonly pack: AssetPack;
   readonly name: string;
   readonly kind: AssetKind;
@@ -17,11 +20,13 @@ export interface AssetEntry {
   readonly url: string;
   readonly size: { readonly x: number; readonly y: number; readonly z: number };
   readonly clips: readonly string[];
+  readonly shippedClips: readonly string[];
 }
 
 export const ASSETS = {
   "nature/Bush_Common": {
     "id": "nature/Bush_Common",
+    "shipped": false,
     "pack": "nature",
     "name": "Bush_Common",
     "kind": "static",
@@ -33,10 +38,12 @@ export const ASSETS = {
       "y": 1.58,
       "z": 1.97
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Bush_Common_Flowers": {
     "id": "nature/Bush_Common_Flowers",
+    "shipped": false,
     "pack": "nature",
     "name": "Bush_Common_Flowers",
     "kind": "static",
@@ -48,10 +55,12 @@ export const ASSETS = {
       "y": 1.58,
       "z": 1.97
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Clover_1": {
     "id": "nature/Clover_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Clover_1",
     "kind": "static",
@@ -63,10 +72,12 @@ export const ASSETS = {
       "y": 1.14,
       "z": 0.76
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Clover_2": {
     "id": "nature/Clover_2",
+    "shipped": false,
     "pack": "nature",
     "name": "Clover_2",
     "kind": "static",
@@ -78,10 +89,12 @@ export const ASSETS = {
       "y": 1.26,
       "z": 0.84
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/CommonTree_1": {
     "id": "nature/CommonTree_1",
+    "shipped": false,
     "pack": "nature",
     "name": "CommonTree_1",
     "kind": "static",
@@ -93,10 +106,12 @@ export const ASSETS = {
       "y": 7.26,
       "z": 4.58
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/CommonTree_2": {
     "id": "nature/CommonTree_2",
+    "shipped": false,
     "pack": "nature",
     "name": "CommonTree_2",
     "kind": "static",
@@ -108,10 +123,12 @@ export const ASSETS = {
       "y": 7.64,
       "z": 4.28
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/CommonTree_3": {
     "id": "nature/CommonTree_3",
+    "shipped": false,
     "pack": "nature",
     "name": "CommonTree_3",
     "kind": "static",
@@ -123,10 +140,12 @@ export const ASSETS = {
       "y": 9.43,
       "z": 4.24
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/CommonTree_4": {
     "id": "nature/CommonTree_4",
+    "shipped": false,
     "pack": "nature",
     "name": "CommonTree_4",
     "kind": "static",
@@ -138,10 +157,12 @@ export const ASSETS = {
       "y": 9.44,
       "z": 3.76
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/CommonTree_5": {
     "id": "nature/CommonTree_5",
+    "shipped": false,
     "pack": "nature",
     "name": "CommonTree_5",
     "kind": "static",
@@ -153,10 +174,12 @@ export const ASSETS = {
       "y": 7.01,
       "z": 4.22
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/DeadTree_1": {
     "id": "nature/DeadTree_1",
+    "shipped": false,
     "pack": "nature",
     "name": "DeadTree_1",
     "kind": "static",
@@ -168,10 +191,12 @@ export const ASSETS = {
       "y": 9.5,
       "z": 5.75
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/DeadTree_2": {
     "id": "nature/DeadTree_2",
+    "shipped": false,
     "pack": "nature",
     "name": "DeadTree_2",
     "kind": "static",
@@ -183,10 +208,12 @@ export const ASSETS = {
       "y": 11.49,
       "z": 6.38
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/DeadTree_3": {
     "id": "nature/DeadTree_3",
+    "shipped": false,
     "pack": "nature",
     "name": "DeadTree_3",
     "kind": "static",
@@ -198,10 +225,12 @@ export const ASSETS = {
       "y": 13.28,
       "z": 6.43
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/DeadTree_4": {
     "id": "nature/DeadTree_4",
+    "shipped": false,
     "pack": "nature",
     "name": "DeadTree_4",
     "kind": "static",
@@ -213,10 +242,12 @@ export const ASSETS = {
       "y": 12.77,
       "z": 7.73
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/DeadTree_5": {
     "id": "nature/DeadTree_5",
+    "shipped": false,
     "pack": "nature",
     "name": "DeadTree_5",
     "kind": "static",
@@ -228,10 +259,12 @@ export const ASSETS = {
       "y": 16.44,
       "z": 8.41
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Fern_1": {
     "id": "nature/Fern_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Fern_1",
     "kind": "static",
@@ -243,10 +276,12 @@ export const ASSETS = {
       "y": 0.84,
       "z": 2.65
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Flower_3_Group": {
     "id": "nature/Flower_3_Group",
+    "shipped": false,
     "pack": "nature",
     "name": "Flower_3_Group",
     "kind": "static",
@@ -258,10 +293,12 @@ export const ASSETS = {
       "y": 2.05,
       "z": 1.59
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Flower_3_Single": {
     "id": "nature/Flower_3_Single",
+    "shipped": false,
     "pack": "nature",
     "name": "Flower_3_Single",
     "kind": "static",
@@ -273,10 +310,12 @@ export const ASSETS = {
       "y": 2.07,
       "z": 0.88
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Flower_4_Group": {
     "id": "nature/Flower_4_Group",
+    "shipped": false,
     "pack": "nature",
     "name": "Flower_4_Group",
     "kind": "static",
@@ -288,10 +327,12 @@ export const ASSETS = {
       "y": 2.49,
       "z": 1.37
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Flower_4_Single": {
     "id": "nature/Flower_4_Single",
+    "shipped": false,
     "pack": "nature",
     "name": "Flower_4_Single",
     "kind": "static",
@@ -303,10 +344,12 @@ export const ASSETS = {
       "y": 2.42,
       "z": 0.77
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Grass_Common_Short": {
     "id": "nature/Grass_Common_Short",
+    "shipped": false,
     "pack": "nature",
     "name": "Grass_Common_Short",
     "kind": "static",
@@ -318,10 +361,12 @@ export const ASSETS = {
       "y": 1.33,
       "z": 0.74
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Grass_Common_Tall": {
     "id": "nature/Grass_Common_Tall",
+    "shipped": false,
     "pack": "nature",
     "name": "Grass_Common_Tall",
     "kind": "static",
@@ -333,10 +378,12 @@ export const ASSETS = {
       "y": 1.87,
       "z": 0.99
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Grass_Wispy_Short": {
     "id": "nature/Grass_Wispy_Short",
+    "shipped": false,
     "pack": "nature",
     "name": "Grass_Wispy_Short",
     "kind": "static",
@@ -348,10 +395,12 @@ export const ASSETS = {
       "y": 1.07,
       "z": 1.21
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Grass_Wispy_Tall": {
     "id": "nature/Grass_Wispy_Tall",
+    "shipped": false,
     "pack": "nature",
     "name": "Grass_Wispy_Tall",
     "kind": "static",
@@ -363,10 +412,12 @@ export const ASSETS = {
       "y": 1.67,
       "z": 1.59
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Mushroom_Common": {
     "id": "nature/Mushroom_Common",
+    "shipped": false,
     "pack": "nature",
     "name": "Mushroom_Common",
     "kind": "static",
@@ -378,10 +429,12 @@ export const ASSETS = {
       "y": 0.46,
       "z": 0.78
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Mushroom_Laetiporus": {
     "id": "nature/Mushroom_Laetiporus",
+    "shipped": false,
     "pack": "nature",
     "name": "Mushroom_Laetiporus",
     "kind": "static",
@@ -393,10 +446,12 @@ export const ASSETS = {
       "y": 0.77,
       "z": 1.1
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Round_1": {
     "id": "nature/Pebble_Round_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Round_1",
     "kind": "static",
@@ -408,10 +463,12 @@ export const ASSETS = {
       "y": 0.1,
       "z": 0.37
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Round_2": {
     "id": "nature/Pebble_Round_2",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Round_2",
     "kind": "static",
@@ -423,10 +480,12 @@ export const ASSETS = {
       "y": 0.09,
       "z": 0.41
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Round_3": {
     "id": "nature/Pebble_Round_3",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Round_3",
     "kind": "static",
@@ -438,10 +497,12 @@ export const ASSETS = {
       "y": 0.1,
       "z": 0.48
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Round_4": {
     "id": "nature/Pebble_Round_4",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Round_4",
     "kind": "static",
@@ -453,10 +514,12 @@ export const ASSETS = {
       "y": 0.1,
       "z": 0.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Round_5": {
     "id": "nature/Pebble_Round_5",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Round_5",
     "kind": "static",
@@ -468,10 +531,12 @@ export const ASSETS = {
       "y": 0.1,
       "z": 0.35
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Square_1": {
     "id": "nature/Pebble_Square_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Square_1",
     "kind": "static",
@@ -483,10 +548,12 @@ export const ASSETS = {
       "y": 0.13,
       "z": 0.44
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Square_2": {
     "id": "nature/Pebble_Square_2",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Square_2",
     "kind": "static",
@@ -498,10 +565,12 @@ export const ASSETS = {
       "y": 0.14,
       "z": 0.28
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Square_3": {
     "id": "nature/Pebble_Square_3",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Square_3",
     "kind": "static",
@@ -513,10 +582,12 @@ export const ASSETS = {
       "y": 0.16,
       "z": 0.32
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Square_4": {
     "id": "nature/Pebble_Square_4",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Square_4",
     "kind": "static",
@@ -528,10 +599,12 @@ export const ASSETS = {
       "y": 0.17,
       "z": 0.29
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Square_5": {
     "id": "nature/Pebble_Square_5",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Square_5",
     "kind": "static",
@@ -543,10 +616,12 @@ export const ASSETS = {
       "y": 0.15,
       "z": 0.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pebble_Square_6": {
     "id": "nature/Pebble_Square_6",
+    "shipped": false,
     "pack": "nature",
     "name": "Pebble_Square_6",
     "kind": "static",
@@ -558,10 +633,12 @@ export const ASSETS = {
       "y": 0.14,
       "z": 0.26
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Petal_1": {
     "id": "nature/Petal_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Petal_1",
     "kind": "static",
@@ -573,10 +650,12 @@ export const ASSETS = {
       "y": 0.24,
       "z": 0.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Petal_2": {
     "id": "nature/Petal_2",
+    "shipped": false,
     "pack": "nature",
     "name": "Petal_2",
     "kind": "static",
@@ -588,10 +667,12 @@ export const ASSETS = {
       "y": 0.24,
       "z": 0.63
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Petal_3": {
     "id": "nature/Petal_3",
+    "shipped": false,
     "pack": "nature",
     "name": "Petal_3",
     "kind": "static",
@@ -603,10 +684,12 @@ export const ASSETS = {
       "y": 0.19,
       "z": 0.61
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Petal_4": {
     "id": "nature/Petal_4",
+    "shipped": false,
     "pack": "nature",
     "name": "Petal_4",
     "kind": "static",
@@ -618,10 +701,12 @@ export const ASSETS = {
       "y": 0.25,
       "z": 0.24
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Petal_5": {
     "id": "nature/Petal_5",
+    "shipped": false,
     "pack": "nature",
     "name": "Petal_5",
     "kind": "static",
@@ -633,10 +718,12 @@ export const ASSETS = {
       "y": 0.29,
       "z": 0.8
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pine_1": {
     "id": "nature/Pine_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Pine_1",
     "kind": "static",
@@ -648,10 +735,12 @@ export const ASSETS = {
       "y": 7.32,
       "z": 4.54
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pine_2": {
     "id": "nature/Pine_2",
+    "shipped": false,
     "pack": "nature",
     "name": "Pine_2",
     "kind": "static",
@@ -663,10 +752,12 @@ export const ASSETS = {
       "y": 7.38,
       "z": 5.22
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pine_3": {
     "id": "nature/Pine_3",
+    "shipped": false,
     "pack": "nature",
     "name": "Pine_3",
     "kind": "static",
@@ -678,10 +769,12 @@ export const ASSETS = {
       "y": 7.39,
       "z": 4
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pine_4": {
     "id": "nature/Pine_4",
+    "shipped": false,
     "pack": "nature",
     "name": "Pine_4",
     "kind": "static",
@@ -693,10 +786,12 @@ export const ASSETS = {
       "y": 10.24,
       "z": 5.37
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Pine_5": {
     "id": "nature/Pine_5",
+    "shipped": false,
     "pack": "nature",
     "name": "Pine_5",
     "kind": "static",
@@ -708,10 +803,12 @@ export const ASSETS = {
       "y": 8.72,
       "z": 6.22
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Plant_1": {
     "id": "nature/Plant_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Plant_1",
     "kind": "static",
@@ -723,10 +820,12 @@ export const ASSETS = {
       "y": 1.01,
       "z": 1.39
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Plant_1_Big": {
     "id": "nature/Plant_1_Big",
+    "shipped": false,
     "pack": "nature",
     "name": "Plant_1_Big",
     "kind": "static",
@@ -738,10 +837,12 @@ export const ASSETS = {
       "y": 2.35,
       "z": 1.95
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Plant_7": {
     "id": "nature/Plant_7",
+    "shipped": false,
     "pack": "nature",
     "name": "Plant_7",
     "kind": "static",
@@ -753,10 +854,12 @@ export const ASSETS = {
       "y": 0.25,
       "z": 0.96
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Plant_7_Big": {
     "id": "nature/Plant_7_Big",
+    "shipped": false,
     "pack": "nature",
     "name": "Plant_7_Big",
     "kind": "static",
@@ -768,10 +871,12 @@ export const ASSETS = {
       "y": 0.25,
       "z": 1.36
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Round_Small_1": {
     "id": "nature/RockPath_Round_Small_1",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Round_Small_1",
     "kind": "static",
@@ -783,10 +888,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 1.48
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Round_Small_2": {
     "id": "nature/RockPath_Round_Small_2",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Round_Small_2",
     "kind": "static",
@@ -798,10 +905,12 @@ export const ASSETS = {
       "y": 0.1,
       "z": 1.35
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Round_Small_3": {
     "id": "nature/RockPath_Round_Small_3",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Round_Small_3",
     "kind": "static",
@@ -813,10 +922,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 1.29
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Round_Thin": {
     "id": "nature/RockPath_Round_Thin",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Round_Thin",
     "kind": "static",
@@ -828,10 +939,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 2.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Round_Wide": {
     "id": "nature/RockPath_Round_Wide",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Round_Wide",
     "kind": "static",
@@ -843,10 +956,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 2.13
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Square_Small_1": {
     "id": "nature/RockPath_Square_Small_1",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Square_Small_1",
     "kind": "static",
@@ -858,10 +973,12 @@ export const ASSETS = {
       "y": 0.15,
       "z": 0.97
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Square_Small_2": {
     "id": "nature/RockPath_Square_Small_2",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Square_Small_2",
     "kind": "static",
@@ -873,10 +990,12 @@ export const ASSETS = {
       "y": 0.15,
       "z": 0.97
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Square_Small_3": {
     "id": "nature/RockPath_Square_Small_3",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Square_Small_3",
     "kind": "static",
@@ -888,10 +1007,12 @@ export const ASSETS = {
       "y": 0.17,
       "z": 1.08
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Square_Thin": {
     "id": "nature/RockPath_Square_Thin",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Square_Thin",
     "kind": "static",
@@ -903,10 +1024,12 @@ export const ASSETS = {
       "y": 0.18,
       "z": 1.99
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/RockPath_Square_Wide": {
     "id": "nature/RockPath_Square_Wide",
+    "shipped": false,
     "pack": "nature",
     "name": "RockPath_Square_Wide",
     "kind": "static",
@@ -918,10 +1041,12 @@ export const ASSETS = {
       "y": 0.18,
       "z": 1.99
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Rock_Medium_1": {
     "id": "nature/Rock_Medium_1",
+    "shipped": false,
     "pack": "nature",
     "name": "Rock_Medium_1",
     "kind": "static",
@@ -933,10 +1058,12 @@ export const ASSETS = {
       "y": 2.26,
       "z": 2.99
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Rock_Medium_2": {
     "id": "nature/Rock_Medium_2",
+    "shipped": false,
     "pack": "nature",
     "name": "Rock_Medium_2",
     "kind": "static",
@@ -948,10 +1075,12 @@ export const ASSETS = {
       "y": 1.9,
       "z": 2.48
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/Rock_Medium_3": {
     "id": "nature/Rock_Medium_3",
+    "shipped": false,
     "pack": "nature",
     "name": "Rock_Medium_3",
     "kind": "static",
@@ -963,10 +1092,12 @@ export const ASSETS = {
       "y": 2.32,
       "z": 3.48
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/TwistedTree_1": {
     "id": "nature/TwistedTree_1",
+    "shipped": false,
     "pack": "nature",
     "name": "TwistedTree_1",
     "kind": "static",
@@ -978,10 +1109,12 @@ export const ASSETS = {
       "y": 16.73,
       "z": 11.55
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/TwistedTree_2": {
     "id": "nature/TwistedTree_2",
+    "shipped": false,
     "pack": "nature",
     "name": "TwistedTree_2",
     "kind": "static",
@@ -993,10 +1126,12 @@ export const ASSETS = {
       "y": 18.95,
       "z": 9.2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/TwistedTree_3": {
     "id": "nature/TwistedTree_3",
+    "shipped": false,
     "pack": "nature",
     "name": "TwistedTree_3",
     "kind": "static",
@@ -1008,10 +1143,12 @@ export const ASSETS = {
       "y": 16.07,
       "z": 11.51
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/TwistedTree_4": {
     "id": "nature/TwistedTree_4",
+    "shipped": false,
     "pack": "nature",
     "name": "TwistedTree_4",
     "kind": "static",
@@ -1023,10 +1160,12 @@ export const ASSETS = {
       "y": 18.74,
       "z": 11.29
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "nature/TwistedTree_5": {
     "id": "nature/TwistedTree_5",
+    "shipped": false,
     "pack": "nature",
     "name": "TwistedTree_5",
     "kind": "static",
@@ -1038,10 +1177,12 @@ export const ASSETS = {
       "y": 15.66,
       "z": 9.39
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_A_Color1": {
     "id": "forest/Bush_1_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_A_Color1",
     "kind": "static",
@@ -1053,10 +1194,12 @@ export const ASSETS = {
       "y": 0.23,
       "z": 0.23
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_B_Color1": {
     "id": "forest/Bush_1_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_B_Color1",
     "kind": "static",
@@ -1068,10 +1211,12 @@ export const ASSETS = {
       "y": 0.48,
       "z": 0.72
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_C_Color1": {
     "id": "forest/Bush_1_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_C_Color1",
     "kind": "static",
@@ -1083,10 +1228,12 @@ export const ASSETS = {
       "y": 0.81,
       "z": 1.2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_D_Color1": {
     "id": "forest/Bush_1_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_D_Color1",
     "kind": "static",
@@ -1098,10 +1245,12 @@ export const ASSETS = {
       "y": 0.99,
       "z": 1.57
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_E_Color1": {
     "id": "forest/Bush_1_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_E_Color1",
     "kind": "static",
@@ -1113,10 +1262,12 @@ export const ASSETS = {
       "y": 0.81,
       "z": 1.32
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_F_Color1": {
     "id": "forest/Bush_1_F_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_F_Color1",
     "kind": "static",
@@ -1128,10 +1279,12 @@ export const ASSETS = {
       "y": 0.99,
       "z": 1.88
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_1_G_Color1": {
     "id": "forest/Bush_1_G_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_1_G_Color1",
     "kind": "static",
@@ -1143,10 +1296,12 @@ export const ASSETS = {
       "y": 0.99,
       "z": 1.75
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_2_A_Color1": {
     "id": "forest/Bush_2_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Bush_2_A_Color1",
     "kind": "static",
@@ -1158,10 +1313,12 @@ export const ASSETS = {
       "y": 0.53,
       "z": 0.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_2_B_Color1": {
     "id": "forest/Bush_2_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_2_B_Color1",
     "kind": "static",
@@ -1173,10 +1330,12 @@ export const ASSETS = {
       "y": 0.86,
       "z": 0.86
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_2_C_Color1": {
     "id": "forest/Bush_2_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_2_C_Color1",
     "kind": "static",
@@ -1188,10 +1347,12 @@ export const ASSETS = {
       "y": 1.32,
       "z": 1.32
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_2_D_Color1": {
     "id": "forest/Bush_2_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_2_D_Color1",
     "kind": "static",
@@ -1203,10 +1364,12 @@ export const ASSETS = {
       "y": 0.86,
       "z": 1.02
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_2_E_Color1": {
     "id": "forest/Bush_2_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_2_E_Color1",
     "kind": "static",
@@ -1218,10 +1381,12 @@ export const ASSETS = {
       "y": 1.33,
       "z": 2.01
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_2_F_Color1": {
     "id": "forest/Bush_2_F_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_2_F_Color1",
     "kind": "static",
@@ -1233,10 +1398,12 @@ export const ASSETS = {
       "y": 1.79,
       "z": 1.59
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_3_A_Color1": {
     "id": "forest/Bush_3_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_3_A_Color1",
     "kind": "static",
@@ -1248,10 +1415,12 @@ export const ASSETS = {
       "y": 0.49,
       "z": 1.03
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_3_B_Color1": {
     "id": "forest/Bush_3_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_3_B_Color1",
     "kind": "static",
@@ -1263,10 +1432,12 @@ export const ASSETS = {
       "y": 0.8,
       "z": 1.68
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_3_C_Color1": {
     "id": "forest/Bush_3_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_3_C_Color1",
     "kind": "static",
@@ -1278,10 +1449,12 @@ export const ASSETS = {
       "y": 1.15,
       "z": 2.49
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_4_A_Color1": {
     "id": "forest/Bush_4_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_4_A_Color1",
     "kind": "static",
@@ -1293,10 +1466,12 @@ export const ASSETS = {
       "y": 0.43,
       "z": 0.58
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_4_B_Color1": {
     "id": "forest/Bush_4_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_4_B_Color1",
     "kind": "static",
@@ -1308,10 +1483,12 @@ export const ASSETS = {
       "y": 0.74,
       "z": 0.99
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_4_C_Color1": {
     "id": "forest/Bush_4_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_4_C_Color1",
     "kind": "static",
@@ -1323,10 +1500,12 @@ export const ASSETS = {
       "y": 1.3,
       "z": 1.58
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_4_D_Color1": {
     "id": "forest/Bush_4_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_4_D_Color1",
     "kind": "static",
@@ -1338,10 +1517,12 @@ export const ASSETS = {
       "y": 0.74,
       "z": 1.29
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_4_E_Color1": {
     "id": "forest/Bush_4_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_4_E_Color1",
     "kind": "static",
@@ -1353,10 +1534,12 @@ export const ASSETS = {
       "y": 1.3,
       "z": 2.28
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Bush_4_F_Color1": {
     "id": "forest/Bush_4_F_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Bush_4_F_Color1",
     "kind": "static",
@@ -1368,10 +1551,12 @@ export const ASSETS = {
       "y": 1.3,
       "z": 2.14
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_A_Color1": {
     "id": "forest/Grass_1_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Grass_1_A_Color1",
     "kind": "static",
@@ -1383,10 +1568,12 @@ export const ASSETS = {
       "y": 0.56,
       "z": 0.15
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_A_Singlesided_Color1": {
     "id": "forest/Grass_1_A_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_A_Singlesided_Color1",
     "kind": "static",
@@ -1398,10 +1585,12 @@ export const ASSETS = {
       "y": 0.56,
       "z": 0.13
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_B_Color1": {
     "id": "forest/Grass_1_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_B_Color1",
     "kind": "static",
@@ -1413,10 +1602,12 @@ export const ASSETS = {
       "y": 0.54,
       "z": 0.56
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_B_Singlesided_Color1": {
     "id": "forest/Grass_1_B_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_B_Singlesided_Color1",
     "kind": "static",
@@ -1428,10 +1619,12 @@ export const ASSETS = {
       "y": 0.52,
       "z": 0.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_C_Color1": {
     "id": "forest/Grass_1_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_C_Color1",
     "kind": "static",
@@ -1443,10 +1636,12 @@ export const ASSETS = {
       "y": 0.58,
       "z": 0.72
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_C_Singlesided_Color1": {
     "id": "forest/Grass_1_C_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_C_Singlesided_Color1",
     "kind": "static",
@@ -1458,10 +1653,12 @@ export const ASSETS = {
       "y": 0.58,
       "z": 0.73
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_D_Color1": {
     "id": "forest/Grass_1_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_D_Color1",
     "kind": "static",
@@ -1473,10 +1670,12 @@ export const ASSETS = {
       "y": 0.59,
       "z": 1.18
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_1_D_Singlesided_Color1": {
     "id": "forest/Grass_1_D_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_1_D_Singlesided_Color1",
     "kind": "static",
@@ -1488,10 +1687,12 @@ export const ASSETS = {
       "y": 0.58,
       "z": 1.19
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_A_Color1": {
     "id": "forest/Grass_2_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Grass_2_A_Color1",
     "kind": "static",
@@ -1503,10 +1704,12 @@ export const ASSETS = {
       "y": 0.92,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_A_Singlesided_Color1": {
     "id": "forest/Grass_2_A_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_A_Singlesided_Color1",
     "kind": "static",
@@ -1518,10 +1721,12 @@ export const ASSETS = {
       "y": 0.92,
       "z": 0.23
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_B_Color1": {
     "id": "forest/Grass_2_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_B_Color1",
     "kind": "static",
@@ -1533,10 +1738,12 @@ export const ASSETS = {
       "y": 0.92,
       "z": 0.4
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_B_Singlesided_Color1": {
     "id": "forest/Grass_2_B_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_B_Singlesided_Color1",
     "kind": "static",
@@ -1548,10 +1755,12 @@ export const ASSETS = {
       "y": 0.92,
       "z": 0.38
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_C_Color1": {
     "id": "forest/Grass_2_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_C_Color1",
     "kind": "static",
@@ -1563,10 +1772,12 @@ export const ASSETS = {
       "y": 0.94,
       "z": 0.76
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_C_Singlesided_Color1": {
     "id": "forest/Grass_2_C_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_C_Singlesided_Color1",
     "kind": "static",
@@ -1578,10 +1789,12 @@ export const ASSETS = {
       "y": 0.93,
       "z": 0.74
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_D_Color1": {
     "id": "forest/Grass_2_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_D_Color1",
     "kind": "static",
@@ -1593,10 +1806,12 @@ export const ASSETS = {
       "y": 0.94,
       "z": 1.37
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Grass_2_D_Singlesided_Color1": {
     "id": "forest/Grass_2_D_Singlesided_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Grass_2_D_Singlesided_Color1",
     "kind": "static",
@@ -1608,10 +1823,12 @@ export const ASSETS = {
       "y": 0.93,
       "z": 1.34
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_A_Color1": {
     "id": "forest/Rock_1_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_A_Color1",
     "kind": "static",
@@ -1623,10 +1840,12 @@ export const ASSETS = {
       "y": 0.54,
       "z": 0.61
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_B_Color1": {
     "id": "forest/Rock_1_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_B_Color1",
     "kind": "static",
@@ -1638,10 +1857,12 @@ export const ASSETS = {
       "y": 0.54,
       "z": 0.58
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_C_Color1": {
     "id": "forest/Rock_1_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_C_Color1",
     "kind": "static",
@@ -1653,10 +1874,12 @@ export const ASSETS = {
       "y": 0.54,
       "z": 0.61
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_D_Color1": {
     "id": "forest/Rock_1_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_D_Color1",
     "kind": "static",
@@ -1668,10 +1891,12 @@ export const ASSETS = {
       "y": 1.13,
       "z": 1.16
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_E_Color1": {
     "id": "forest/Rock_1_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_E_Color1",
     "kind": "static",
@@ -1683,10 +1908,12 @@ export const ASSETS = {
       "y": 1.13,
       "z": 1.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_F_Color1": {
     "id": "forest/Rock_1_F_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_F_Color1",
     "kind": "static",
@@ -1698,10 +1925,12 @@ export const ASSETS = {
       "y": 1.13,
       "z": 0.87
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_G_Color1": {
     "id": "forest/Rock_1_G_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_G_Color1",
     "kind": "static",
@@ -1713,10 +1942,12 @@ export const ASSETS = {
       "y": 1.87,
       "z": 1.65
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_H_Color1": {
     "id": "forest/Rock_1_H_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_H_Color1",
     "kind": "static",
@@ -1728,10 +1959,12 @@ export const ASSETS = {
       "y": 1.87,
       "z": 1.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_I_Color1": {
     "id": "forest/Rock_1_I_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_I_Color1",
     "kind": "static",
@@ -1743,10 +1976,12 @@ export const ASSETS = {
       "y": 1.87,
       "z": 2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_J_Color1": {
     "id": "forest/Rock_1_J_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_J_Color1",
     "kind": "static",
@@ -1758,10 +1993,12 @@ export const ASSETS = {
       "y": 3.36,
       "z": 3.76
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_K_Color1": {
     "id": "forest/Rock_1_K_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_K_Color1",
     "kind": "static",
@@ -1773,10 +2010,12 @@ export const ASSETS = {
       "y": 3.65,
       "z": 3.13
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_L_Color1": {
     "id": "forest/Rock_1_L_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_L_Color1",
     "kind": "static",
@@ -1788,10 +2027,12 @@ export const ASSETS = {
       "y": 3.4,
       "z": 2.62
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_M_Color1": {
     "id": "forest/Rock_1_M_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_M_Color1",
     "kind": "static",
@@ -1803,10 +2044,12 @@ export const ASSETS = {
       "y": 3.52,
       "z": 2.71
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_N_Color1": {
     "id": "forest/Rock_1_N_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_N_Color1",
     "kind": "static",
@@ -1818,10 +2061,12 @@ export const ASSETS = {
       "y": 4.5,
       "z": 2.24
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_O_Color1": {
     "id": "forest/Rock_1_O_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_O_Color1",
     "kind": "static",
@@ -1833,10 +2078,12 @@ export const ASSETS = {
       "y": 4.58,
       "z": 2.11
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_P_Color1": {
     "id": "forest/Rock_1_P_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_P_Color1",
     "kind": "static",
@@ -1848,10 +2095,12 @@ export const ASSETS = {
       "y": 4.01,
       "z": 1.84
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_1_Q_Color1": {
     "id": "forest/Rock_1_Q_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_1_Q_Color1",
     "kind": "static",
@@ -1863,10 +2112,12 @@ export const ASSETS = {
       "y": 4.28,
       "z": 2.8
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_A_Color1": {
     "id": "forest/Rock_2_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_A_Color1",
     "kind": "static",
@@ -1878,10 +2129,12 @@ export const ASSETS = {
       "y": 0.22,
       "z": 0.22
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_B_Color1": {
     "id": "forest/Rock_2_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_B_Color1",
     "kind": "static",
@@ -1893,10 +2146,12 @@ export const ASSETS = {
       "y": 0.65,
       "z": 0.63
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_C_Color1": {
     "id": "forest/Rock_2_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_C_Color1",
     "kind": "static",
@@ -1908,10 +2163,12 @@ export const ASSETS = {
       "y": 1.33,
       "z": 1.3
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_D_Color1": {
     "id": "forest/Rock_2_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_D_Color1",
     "kind": "static",
@@ -1923,10 +2180,12 @@ export const ASSETS = {
       "y": 1.74,
       "z": 1.71
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_E_Color1": {
     "id": "forest/Rock_2_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_E_Color1",
     "kind": "static",
@@ -1938,10 +2197,12 @@ export const ASSETS = {
       "y": 2.86,
       "z": 3.31
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_F_Color1": {
     "id": "forest/Rock_2_F_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_F_Color1",
     "kind": "static",
@@ -1953,10 +2214,12 @@ export const ASSETS = {
       "y": 2.86,
       "z": 2.87
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_G_Color1": {
     "id": "forest/Rock_2_G_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_G_Color1",
     "kind": "static",
@@ -1968,10 +2231,12 @@ export const ASSETS = {
       "y": 3.2,
       "z": 3.73
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_2_H_Color1": {
     "id": "forest/Rock_2_H_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_2_H_Color1",
     "kind": "static",
@@ -1983,10 +2248,12 @@ export const ASSETS = {
       "y": 2.76,
       "z": 3.31
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_A_Color1": {
     "id": "forest/Rock_3_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Rock_3_A_Color1",
     "kind": "static",
@@ -1998,10 +2265,12 @@ export const ASSETS = {
       "y": 0.86,
       "z": 0.81
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_B_Color1": {
     "id": "forest/Rock_3_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_B_Color1",
     "kind": "static",
@@ -2013,10 +2282,12 @@ export const ASSETS = {
       "y": 1.03,
       "z": 0.85
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_C_Color1": {
     "id": "forest/Rock_3_C_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Rock_3_C_Color1",
     "kind": "static",
@@ -2028,10 +2299,12 @@ export const ASSETS = {
       "y": 0.97,
       "z": 0.86
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_D_Color1": {
     "id": "forest/Rock_3_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_D_Color1",
     "kind": "static",
@@ -2043,10 +2316,12 @@ export const ASSETS = {
       "y": 0.97,
       "z": 0.79
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_E_Color1": {
     "id": "forest/Rock_3_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_E_Color1",
     "kind": "static",
@@ -2058,10 +2333,12 @@ export const ASSETS = {
       "y": 1.29,
       "z": 1.18
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_F_Color1": {
     "id": "forest/Rock_3_F_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_F_Color1",
     "kind": "static",
@@ -2073,10 +2350,12 @@ export const ASSETS = {
       "y": 1.18,
       "z": 1.19
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_G_Color1": {
     "id": "forest/Rock_3_G_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_G_Color1",
     "kind": "static",
@@ -2088,10 +2367,12 @@ export const ASSETS = {
       "y": 2,
       "z": 1.73
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_H_Color1": {
     "id": "forest/Rock_3_H_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_H_Color1",
     "kind": "static",
@@ -2103,10 +2384,12 @@ export const ASSETS = {
       "y": 2.06,
       "z": 1.76
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_I_Color1": {
     "id": "forest/Rock_3_I_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_I_Color1",
     "kind": "static",
@@ -2118,10 +2401,12 @@ export const ASSETS = {
       "y": 2.11,
       "z": 1.64
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_J_Color1": {
     "id": "forest/Rock_3_J_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_J_Color1",
     "kind": "static",
@@ -2133,10 +2418,12 @@ export const ASSETS = {
       "y": 1.9,
       "z": 1.74
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_K_Color1": {
     "id": "forest/Rock_3_K_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_K_Color1",
     "kind": "static",
@@ -2148,10 +2435,12 @@ export const ASSETS = {
       "y": 2.22,
       "z": 2.59
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_L_Color1": {
     "id": "forest/Rock_3_L_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_L_Color1",
     "kind": "static",
@@ -2163,10 +2452,12 @@ export const ASSETS = {
       "y": 2.27,
       "z": 2.56
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_M_Color1": {
     "id": "forest/Rock_3_M_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_M_Color1",
     "kind": "static",
@@ -2178,10 +2469,12 @@ export const ASSETS = {
       "y": 3.6,
       "z": 2.81
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_N_Color1": {
     "id": "forest/Rock_3_N_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_N_Color1",
     "kind": "static",
@@ -2193,10 +2486,12 @@ export const ASSETS = {
       "y": 3.53,
       "z": 2.98
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_O_Color1": {
     "id": "forest/Rock_3_O_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_O_Color1",
     "kind": "static",
@@ -2208,10 +2503,12 @@ export const ASSETS = {
       "y": 3.47,
       "z": 2.93
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_P_Color1": {
     "id": "forest/Rock_3_P_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_P_Color1",
     "kind": "static",
@@ -2223,10 +2520,12 @@ export const ASSETS = {
       "y": 3.68,
       "z": 2.87
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_Q_Color1": {
     "id": "forest/Rock_3_Q_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_Q_Color1",
     "kind": "static",
@@ -2238,10 +2537,12 @@ export const ASSETS = {
       "y": 3.72,
       "z": 4.48
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Rock_3_R_Color1": {
     "id": "forest/Rock_3_R_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Rock_3_R_Color1",
     "kind": "static",
@@ -2253,10 +2554,12 @@ export const ASSETS = {
       "y": 3.85,
       "z": 4.21
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_1_A_Color1": {
     "id": "forest/Tree_1_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Tree_1_A_Color1",
     "kind": "static",
@@ -2268,10 +2571,12 @@ export const ASSETS = {
       "y": 4.16,
       "z": 3.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_1_B_Color1": {
     "id": "forest/Tree_1_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_1_B_Color1",
     "kind": "static",
@@ -2283,10 +2588,12 @@ export const ASSETS = {
       "y": 4.93,
       "z": 3.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_1_C_Color1": {
     "id": "forest/Tree_1_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_1_C_Color1",
     "kind": "static",
@@ -2298,10 +2605,12 @@ export const ASSETS = {
       "y": 7.81,
       "z": 5.75
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_2_A_Color1": {
     "id": "forest/Tree_2_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Tree_2_A_Color1",
     "kind": "static",
@@ -2313,10 +2622,12 @@ export const ASSETS = {
       "y": 4.67,
       "z": 2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_2_B_Color1": {
     "id": "forest/Tree_2_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_2_B_Color1",
     "kind": "static",
@@ -2328,10 +2639,12 @@ export const ASSETS = {
       "y": 6.04,
       "z": 2.1
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_2_C_Color1": {
     "id": "forest/Tree_2_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_2_C_Color1",
     "kind": "static",
@@ -2343,10 +2656,12 @@ export const ASSETS = {
       "y": 6.92,
       "z": 3.4
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_2_D_Color1": {
     "id": "forest/Tree_2_D_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_2_D_Color1",
     "kind": "static",
@@ -2358,10 +2673,12 @@ export const ASSETS = {
       "y": 8.09,
       "z": 4.03
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_2_E_Color1": {
     "id": "forest/Tree_2_E_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_2_E_Color1",
     "kind": "static",
@@ -2373,10 +2690,12 @@ export const ASSETS = {
       "y": 8.79,
       "z": 5.68
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_3_A_Color1": {
     "id": "forest/Tree_3_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Tree_3_A_Color1",
     "kind": "static",
@@ -2388,10 +2707,12 @@ export const ASSETS = {
       "y": 3.51,
       "z": 3.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_3_B_Color1": {
     "id": "forest/Tree_3_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_3_B_Color1",
     "kind": "static",
@@ -2403,10 +2724,12 @@ export const ASSETS = {
       "y": 4.35,
       "z": 4.13
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_3_C_Color1": {
     "id": "forest/Tree_3_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_3_C_Color1",
     "kind": "static",
@@ -2418,10 +2741,12 @@ export const ASSETS = {
       "y": 5.79,
       "z": 4.62
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_4_A_Color1": {
     "id": "forest/Tree_4_A_Color1",
+    "shipped": true,
     "pack": "forest",
     "name": "Tree_4_A_Color1",
     "kind": "static",
@@ -2433,10 +2758,12 @@ export const ASSETS = {
       "y": 5.27,
       "z": 2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_4_B_Color1": {
     "id": "forest/Tree_4_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_4_B_Color1",
     "kind": "static",
@@ -2448,10 +2775,12 @@ export const ASSETS = {
       "y": 6.94,
       "z": 2.27
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_4_C_Color1": {
     "id": "forest/Tree_4_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_4_C_Color1",
     "kind": "static",
@@ -2463,10 +2792,12 @@ export const ASSETS = {
       "y": 10.77,
       "z": 2.87
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_Bare_1_A_Color1": {
     "id": "forest/Tree_Bare_1_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_Bare_1_A_Color1",
     "kind": "static",
@@ -2478,10 +2809,12 @@ export const ASSETS = {
       "y": 2.86,
       "z": 1.03
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_Bare_1_B_Color1": {
     "id": "forest/Tree_Bare_1_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_Bare_1_B_Color1",
     "kind": "static",
@@ -2493,10 +2826,12 @@ export const ASSETS = {
       "y": 3.25,
       "z": 1.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_Bare_1_C_Color1": {
     "id": "forest/Tree_Bare_1_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_Bare_1_C_Color1",
     "kind": "static",
@@ -2508,10 +2843,12 @@ export const ASSETS = {
       "y": 5.26,
       "z": 2.07
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_Bare_2_A_Color1": {
     "id": "forest/Tree_Bare_2_A_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_Bare_2_A_Color1",
     "kind": "static",
@@ -2523,10 +2860,12 @@ export const ASSETS = {
       "y": 3.84,
       "z": 0.6
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_Bare_2_B_Color1": {
     "id": "forest/Tree_Bare_2_B_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_Bare_2_B_Color1",
     "kind": "static",
@@ -2538,10 +2877,12 @@ export const ASSETS = {
       "y": 5.54,
       "z": 0.66
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "forest/Tree_Bare_2_C_Color1": {
     "id": "forest/Tree_Bare_2_C_Color1",
+    "shipped": false,
     "pack": "forest",
     "name": "Tree_Bare_2_C_Color1",
     "kind": "static",
@@ -2553,10 +2894,12 @@ export const ASSETS = {
       "y": 7.61,
       "z": 1.1
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/barrel-open": {
     "id": "survival/barrel-open",
+    "shipped": false,
     "pack": "survival",
     "name": "barrel-open",
     "kind": "static",
@@ -2568,10 +2911,12 @@ export const ASSETS = {
       "y": 0.34,
       "z": 0.24
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/barrel": {
     "id": "survival/barrel",
+    "shipped": false,
     "pack": "survival",
     "name": "barrel",
     "kind": "static",
@@ -2583,10 +2928,12 @@ export const ASSETS = {
       "y": 0.34,
       "z": 0.24
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/bedroll-frame": {
     "id": "survival/bedroll-frame",
+    "shipped": false,
     "pack": "survival",
     "name": "bedroll-frame",
     "kind": "static",
@@ -2598,10 +2945,12 @@ export const ASSETS = {
       "y": 0.15,
       "z": 0.61
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/bedroll-packed": {
     "id": "survival/bedroll-packed",
+    "shipped": false,
     "pack": "survival",
     "name": "bedroll-packed",
     "kind": "static",
@@ -2613,10 +2962,12 @@ export const ASSETS = {
       "y": 0.09,
       "z": 0.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/bedroll": {
     "id": "survival/bedroll",
+    "shipped": false,
     "pack": "survival",
     "name": "bedroll",
     "kind": "static",
@@ -2628,10 +2979,12 @@ export const ASSETS = {
       "y": 0.12,
       "z": 0.61
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/bottle-large": {
     "id": "survival/bottle-large",
+    "shipped": false,
     "pack": "survival",
     "name": "bottle-large",
     "kind": "static",
@@ -2643,10 +2996,12 @@ export const ASSETS = {
       "y": 0.14,
       "z": 0.08
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/bottle": {
     "id": "survival/bottle",
+    "shipped": false,
     "pack": "survival",
     "name": "bottle",
     "kind": "static",
@@ -2658,10 +3013,12 @@ export const ASSETS = {
       "y": 0.15,
       "z": 0.06
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/box-large-open": {
     "id": "survival/box-large-open",
+    "shipped": false,
     "pack": "survival",
     "name": "box-large-open",
     "kind": "static",
@@ -2673,10 +3030,12 @@ export const ASSETS = {
       "y": 0.31,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/box-large": {
     "id": "survival/box-large",
+    "shipped": false,
     "pack": "survival",
     "name": "box-large",
     "kind": "static",
@@ -2688,10 +3047,12 @@ export const ASSETS = {
       "y": 0.25,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/box-open": {
     "id": "survival/box-open",
+    "shipped": false,
     "pack": "survival",
     "name": "box-open",
     "kind": "static",
@@ -2703,10 +3064,12 @@ export const ASSETS = {
       "y": 0.31,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/box": {
     "id": "survival/box",
+    "shipped": false,
     "pack": "survival",
     "name": "box",
     "kind": "static",
@@ -2718,10 +3081,12 @@ export const ASSETS = {
       "y": 0.25,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/bucket": {
     "id": "survival/bucket",
+    "shipped": false,
     "pack": "survival",
     "name": "bucket",
     "kind": "static",
@@ -2733,10 +3098,12 @@ export const ASSETS = {
       "y": 0.19,
       "z": 0.14
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/campfire-fishing-stand": {
     "id": "survival/campfire-fishing-stand",
+    "shipped": false,
     "pack": "survival",
     "name": "campfire-fishing-stand",
     "kind": "static",
@@ -2748,10 +3115,12 @@ export const ASSETS = {
       "y": 0.28,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/campfire-pit": {
     "id": "survival/campfire-pit",
+    "shipped": false,
     "pack": "survival",
     "name": "campfire-pit",
     "kind": "static",
@@ -2763,10 +3132,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 0.27
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/campfire-stand": {
     "id": "survival/campfire-stand",
+    "shipped": false,
     "pack": "survival",
     "name": "campfire-stand",
     "kind": "static",
@@ -2778,10 +3149,12 @@ export const ASSETS = {
       "y": 0.28,
       "z": 0.12
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/chest": {
     "id": "survival/chest",
+    "shipped": false,
     "pack": "survival",
     "name": "chest",
     "kind": "static",
@@ -2797,10 +3170,12 @@ export const ASSETS = {
       "open",
       "close",
       "open-close"
-    ]
+    ],
+    "shippedClips": []
   },
   "survival/fence-doorway": {
     "id": "survival/fence-doorway",
+    "shipped": false,
     "pack": "survival",
     "name": "fence-doorway",
     "kind": "static",
@@ -2812,10 +3187,12 @@ export const ASSETS = {
       "y": 0.52,
       "z": 0.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/fence-fortified": {
     "id": "survival/fence-fortified",
+    "shipped": false,
     "pack": "survival",
     "name": "fence-fortified",
     "kind": "static",
@@ -2827,10 +3204,12 @@ export const ASSETS = {
       "y": 0.52,
       "z": 0.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/fence": {
     "id": "survival/fence",
+    "shipped": false,
     "pack": "survival",
     "name": "fence",
     "kind": "static",
@@ -2842,10 +3221,12 @@ export const ASSETS = {
       "y": 0.52,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/fish-large": {
     "id": "survival/fish-large",
+    "shipped": false,
     "pack": "survival",
     "name": "fish-large",
     "kind": "static",
@@ -2857,10 +3238,12 @@ export const ASSETS = {
       "y": 0.16,
       "z": 0.1
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/fish": {
     "id": "survival/fish",
+    "shipped": false,
     "pack": "survival",
     "name": "fish",
     "kind": "static",
@@ -2872,10 +3255,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 0.07
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/floor-hole": {
     "id": "survival/floor-hole",
+    "shipped": false,
     "pack": "survival",
     "name": "floor-hole",
     "kind": "static",
@@ -2887,10 +3272,12 @@ export const ASSETS = {
       "y": 0.07,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/floor-old": {
     "id": "survival/floor-old",
+    "shipped": false,
     "pack": "survival",
     "name": "floor-old",
     "kind": "static",
@@ -2902,10 +3289,12 @@ export const ASSETS = {
       "y": 0.05,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/floor": {
     "id": "survival/floor",
+    "shipped": false,
     "pack": "survival",
     "name": "floor",
     "kind": "static",
@@ -2917,10 +3306,12 @@ export const ASSETS = {
       "y": 0.05,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/grass-large": {
     "id": "survival/grass-large",
+    "shipped": false,
     "pack": "survival",
     "name": "grass-large",
     "kind": "static",
@@ -2932,10 +3323,12 @@ export const ASSETS = {
       "y": 0.14,
       "z": 0.49
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/grass": {
     "id": "survival/grass",
+    "shipped": false,
     "pack": "survival",
     "name": "grass",
     "kind": "static",
@@ -2947,10 +3340,12 @@ export const ASSETS = {
       "y": 0.14,
       "z": 0.26
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/metal-panel-narrow": {
     "id": "survival/metal-panel-narrow",
+    "shipped": false,
     "pack": "survival",
     "name": "metal-panel-narrow",
     "kind": "static",
@@ -2962,10 +3357,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/metal-panel-screws-half": {
     "id": "survival/metal-panel-screws-half",
+    "shipped": false,
     "pack": "survival",
     "name": "metal-panel-screws-half",
     "kind": "static",
@@ -2977,10 +3374,12 @@ export const ASSETS = {
       "y": 0.25,
       "z": 0.06
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/metal-panel-screws-narrow": {
     "id": "survival/metal-panel-screws-narrow",
+    "shipped": false,
     "pack": "survival",
     "name": "metal-panel-screws-narrow",
     "kind": "static",
@@ -2992,10 +3391,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.06
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/metal-panel-screws": {
     "id": "survival/metal-panel-screws",
+    "shipped": false,
     "pack": "survival",
     "name": "metal-panel-screws",
     "kind": "static",
@@ -3007,10 +3408,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.06
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/metal-panel": {
     "id": "survival/metal-panel",
+    "shipped": false,
     "pack": "survival",
     "name": "metal-panel",
     "kind": "static",
@@ -3022,10 +3425,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/patch-grass-large": {
     "id": "survival/patch-grass-large",
+    "shipped": false,
     "pack": "survival",
     "name": "patch-grass-large",
     "kind": "static",
@@ -3037,10 +3442,12 @@ export const ASSETS = {
       "y": 0,
       "z": 1.2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/patch-grass": {
     "id": "survival/patch-grass",
+    "shipped": false,
     "pack": "survival",
     "name": "patch-grass",
     "kind": "static",
@@ -3052,10 +3459,12 @@ export const ASSETS = {
       "y": 0,
       "z": 1.2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/resource-planks": {
     "id": "survival/resource-planks",
+    "shipped": false,
     "pack": "survival",
     "name": "resource-planks",
     "kind": "static",
@@ -3067,10 +3476,12 @@ export const ASSETS = {
       "y": 0.09,
       "z": 0.63
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/resource-stone-large": {
     "id": "survival/resource-stone-large",
+    "shipped": false,
     "pack": "survival",
     "name": "resource-stone-large",
     "kind": "static",
@@ -3082,10 +3493,12 @@ export const ASSETS = {
       "y": 0.16,
       "z": 0.34
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/resource-stone": {
     "id": "survival/resource-stone",
+    "shipped": false,
     "pack": "survival",
     "name": "resource-stone",
     "kind": "static",
@@ -3097,10 +3510,12 @@ export const ASSETS = {
       "y": 0.11,
       "z": 0.14
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/resource-wood": {
     "id": "survival/resource-wood",
+    "shipped": false,
     "pack": "survival",
     "name": "resource-wood",
     "kind": "static",
@@ -3112,10 +3527,12 @@ export const ASSETS = {
       "y": 0.06,
       "z": 0.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-a": {
     "id": "survival/rock-a",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-a",
     "kind": "static",
@@ -3127,10 +3544,12 @@ export const ASSETS = {
       "y": 0.39,
       "z": 0.62
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-b": {
     "id": "survival/rock-b",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-b",
     "kind": "static",
@@ -3142,10 +3561,12 @@ export const ASSETS = {
       "y": 0.42,
       "z": 0.72
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-c": {
     "id": "survival/rock-c",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-c",
     "kind": "static",
@@ -3157,10 +3578,12 @@ export const ASSETS = {
       "y": 0.51,
       "z": 0.57
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-flat-grass": {
     "id": "survival/rock-flat-grass",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-flat-grass",
     "kind": "static",
@@ -3172,10 +3595,12 @@ export const ASSETS = {
       "y": 0.23,
       "z": 1.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-flat": {
     "id": "survival/rock-flat",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-flat",
     "kind": "static",
@@ -3187,10 +3612,12 @@ export const ASSETS = {
       "y": 0.19,
       "z": 1.45
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-sand-a": {
     "id": "survival/rock-sand-a",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-sand-a",
     "kind": "static",
@@ -3202,10 +3629,12 @@ export const ASSETS = {
       "y": 0.39,
       "z": 0.48
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-sand-b": {
     "id": "survival/rock-sand-b",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-sand-b",
     "kind": "static",
@@ -3217,10 +3646,12 @@ export const ASSETS = {
       "y": 0.45,
       "z": 0.79
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/rock-sand-c": {
     "id": "survival/rock-sand-c",
+    "shipped": false,
     "pack": "survival",
     "name": "rock-sand-c",
     "kind": "static",
@@ -3232,10 +3663,12 @@ export const ASSETS = {
       "y": 0.51,
       "z": 0.57
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/signpost-single": {
     "id": "survival/signpost-single",
+    "shipped": false,
     "pack": "survival",
     "name": "signpost-single",
     "kind": "static",
@@ -3247,10 +3680,12 @@ export const ASSETS = {
       "y": 0.46,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/signpost": {
     "id": "survival/signpost",
+    "shipped": false,
     "pack": "survival",
     "name": "signpost",
     "kind": "static",
@@ -3262,10 +3697,12 @@ export const ASSETS = {
       "y": 0.46,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-canvas": {
     "id": "survival/structure-canvas",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-canvas",
     "kind": "static",
@@ -3277,10 +3714,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-floor": {
     "id": "survival/structure-floor",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-floor",
     "kind": "static",
@@ -3292,10 +3731,12 @@ export const ASSETS = {
       "y": 0.55,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-metal-doorway": {
     "id": "survival/structure-metal-doorway",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-metal-doorway",
     "kind": "static",
@@ -3307,10 +3748,12 @@ export const ASSETS = {
       "y": 0.52,
       "z": 0.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-metal-floor": {
     "id": "survival/structure-metal-floor",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-metal-floor",
     "kind": "static",
@@ -3322,10 +3765,12 @@ export const ASSETS = {
       "y": 0.51,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-metal-roof": {
     "id": "survival/structure-metal-roof",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-metal-roof",
     "kind": "static",
@@ -3337,10 +3782,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.55
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-metal-wall": {
     "id": "survival/structure-metal-wall",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-metal-wall",
     "kind": "static",
@@ -3352,10 +3799,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-metal": {
     "id": "survival/structure-metal",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-metal",
     "kind": "static",
@@ -3367,10 +3816,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.54
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure-roof": {
     "id": "survival/structure-roof",
+    "shipped": false,
     "pack": "survival",
     "name": "structure-roof",
     "kind": "static",
@@ -3382,10 +3833,12 @@ export const ASSETS = {
       "y": 0.66,
       "z": 0.55
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/structure": {
     "id": "survival/structure",
+    "shipped": false,
     "pack": "survival",
     "name": "structure",
     "kind": "static",
@@ -3397,10 +3850,12 @@ export const ASSETS = {
       "y": 0.5,
       "z": 0.5
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tent-canvas-half": {
     "id": "survival/tent-canvas-half",
+    "shipped": true,
     "pack": "survival",
     "name": "tent-canvas-half",
     "kind": "static",
@@ -3412,10 +3867,12 @@ export const ASSETS = {
       "y": 0.49,
       "z": 0.56
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tent-canvas": {
     "id": "survival/tent-canvas",
+    "shipped": true,
     "pack": "survival",
     "name": "tent-canvas",
     "kind": "static",
@@ -3427,10 +3884,12 @@ export const ASSETS = {
       "y": 0.49,
       "z": 0.56
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tent": {
     "id": "survival/tent",
+    "shipped": false,
     "pack": "survival",
     "name": "tent",
     "kind": "static",
@@ -3442,10 +3901,12 @@ export const ASSETS = {
       "y": 0.49,
       "z": 0.56
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-axe-upgraded": {
     "id": "survival/tool-axe-upgraded",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-axe-upgraded",
     "kind": "static",
@@ -3457,10 +3918,12 @@ export const ASSETS = {
       "y": 0.26,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-axe": {
     "id": "survival/tool-axe",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-axe",
     "kind": "static",
@@ -3472,10 +3935,12 @@ export const ASSETS = {
       "y": 0.26,
       "z": 0.03
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-hammer-upgraded": {
     "id": "survival/tool-hammer-upgraded",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-hammer-upgraded",
     "kind": "static",
@@ -3487,10 +3952,12 @@ export const ASSETS = {
       "y": 0.18,
       "z": 0.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-hammer": {
     "id": "survival/tool-hammer",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-hammer",
     "kind": "static",
@@ -3502,10 +3969,12 @@ export const ASSETS = {
       "y": 0.15,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-hoe-upgraded": {
     "id": "survival/tool-hoe-upgraded",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-hoe-upgraded",
     "kind": "static",
@@ -3517,10 +3986,12 @@ export const ASSETS = {
       "y": 0.24,
       "z": 0.09
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-hoe": {
     "id": "survival/tool-hoe",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-hoe",
     "kind": "static",
@@ -3532,10 +4003,12 @@ export const ASSETS = {
       "y": 0.24,
       "z": 0.07
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-pickaxe-upgraded": {
     "id": "survival/tool-pickaxe-upgraded",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-pickaxe-upgraded",
     "kind": "static",
@@ -3547,10 +4020,12 @@ export const ASSETS = {
       "y": 0.24,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-pickaxe": {
     "id": "survival/tool-pickaxe",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-pickaxe",
     "kind": "static",
@@ -3562,10 +4037,12 @@ export const ASSETS = {
       "y": 0.24,
       "z": 0.04
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-shovel-upgraded": {
     "id": "survival/tool-shovel-upgraded",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-shovel-upgraded",
     "kind": "static",
@@ -3577,10 +4054,12 @@ export const ASSETS = {
       "y": 0.29,
       "z": 0.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tool-shovel": {
     "id": "survival/tool-shovel",
+    "shipped": false,
     "pack": "survival",
     "name": "tool-shovel",
     "kind": "static",
@@ -3592,10 +4071,12 @@ export const ASSETS = {
       "y": 0.29,
       "z": 0.03
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-autumn-tall": {
     "id": "survival/tree-autumn-tall",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-autumn-tall",
     "kind": "static",
@@ -3607,10 +4088,12 @@ export const ASSETS = {
       "y": 1.71,
       "z": 0.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-autumn-trunk": {
     "id": "survival/tree-autumn-trunk",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-autumn-trunk",
     "kind": "static",
@@ -3622,10 +4105,12 @@ export const ASSETS = {
       "y": 0.26,
       "z": 0.2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-autumn": {
     "id": "survival/tree-autumn",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-autumn",
     "kind": "static",
@@ -3637,10 +4122,12 @@ export const ASSETS = {
       "y": 1.41,
       "z": 0.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-log-small": {
     "id": "survival/tree-log-small",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-log-small",
     "kind": "static",
@@ -3652,10 +4139,12 @@ export const ASSETS = {
       "y": 0.28,
       "z": 0.65
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-log": {
     "id": "survival/tree-log",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-log",
     "kind": "static",
@@ -3667,10 +4156,12 @@ export const ASSETS = {
       "y": 0.28,
       "z": 1
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-tall": {
     "id": "survival/tree-tall",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-tall",
     "kind": "static",
@@ -3682,10 +4173,12 @@ export const ASSETS = {
       "y": 1.71,
       "z": 0.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree-trunk": {
     "id": "survival/tree-trunk",
+    "shipped": false,
     "pack": "survival",
     "name": "tree-trunk",
     "kind": "static",
@@ -3697,10 +4190,12 @@ export const ASSETS = {
       "y": 0.26,
       "z": 0.2
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/tree": {
     "id": "survival/tree",
+    "shipped": false,
     "pack": "survival",
     "name": "tree",
     "kind": "static",
@@ -3712,10 +4207,12 @@ export const ASSETS = {
       "y": 1.41,
       "z": 0.53
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/workbench-anvil": {
     "id": "survival/workbench-anvil",
+    "shipped": false,
     "pack": "survival",
     "name": "workbench-anvil",
     "kind": "static",
@@ -3727,10 +4224,12 @@ export const ASSETS = {
       "y": 0.34,
       "z": 0.3
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/workbench-grind": {
     "id": "survival/workbench-grind",
+    "shipped": false,
     "pack": "survival",
     "name": "workbench-grind",
     "kind": "static",
@@ -3742,10 +4241,12 @@ export const ASSETS = {
       "y": 0.28,
       "z": 0.33
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "survival/workbench": {
     "id": "survival/workbench",
+    "shipped": false,
     "pack": "survival",
     "name": "workbench",
     "kind": "static",
@@ -3757,10 +4258,12 @@ export const ASSETS = {
       "y": 0.29,
       "z": 0.3
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "characters/Barbarian": {
     "id": "characters/Barbarian",
+    "shipped": false,
     "pack": "characters",
     "name": "Barbarian",
     "kind": "skinned",
@@ -3772,10 +4275,12 @@ export const ASSETS = {
       "y": 2.4,
       "z": 1.26
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "characters/Knight": {
     "id": "characters/Knight",
+    "shipped": true,
     "pack": "characters",
     "name": "Knight",
     "kind": "skinned",
@@ -3787,10 +4292,12 @@ export const ASSETS = {
       "y": 2.54,
       "z": 1.31
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "characters/Mage": {
     "id": "characters/Mage",
+    "shipped": true,
     "pack": "characters",
     "name": "Mage",
     "kind": "skinned",
@@ -3802,10 +4309,12 @@ export const ASSETS = {
       "y": 2.65,
       "z": 1.97
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "characters/Ranger": {
     "id": "characters/Ranger",
+    "shipped": true,
     "pack": "characters",
     "name": "Ranger",
     "kind": "skinned",
@@ -3817,10 +4326,12 @@ export const ASSETS = {
       "y": 2.27,
       "z": 1.05
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "characters/Rogue": {
     "id": "characters/Rogue",
+    "shipped": true,
     "pack": "characters",
     "name": "Rogue",
     "kind": "skinned",
@@ -3832,10 +4343,12 @@ export const ASSETS = {
       "y": 2.18,
       "z": 1.14
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "characters/Rogue_Hooded": {
     "id": "characters/Rogue_Hooded",
+    "shipped": true,
     "pack": "characters",
     "name": "Rogue_Hooded",
     "kind": "skinned",
@@ -3847,10 +4360,12 @@ export const ASSETS = {
       "y": 2.17,
       "z": 1.1
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/arrow_bow": {
     "id": "items/arrow_bow",
+    "shipped": false,
     "pack": "items",
     "name": "arrow_bow",
     "kind": "static",
@@ -3862,10 +4377,12 @@ export const ASSETS = {
       "y": 0.14,
       "z": 1.26
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/arrow_bow_bundle": {
     "id": "items/arrow_bow_bundle",
+    "shipped": false,
     "pack": "items",
     "name": "arrow_bow_bundle",
     "kind": "static",
@@ -3877,10 +4394,12 @@ export const ASSETS = {
       "y": 1.1,
       "z": 0.43
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/arrow_crossbow": {
     "id": "items/arrow_crossbow",
+    "shipped": false,
     "pack": "items",
     "name": "arrow_crossbow",
     "kind": "static",
@@ -3892,10 +4411,12 @@ export const ASSETS = {
       "y": 0.1,
       "z": 0.75
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/arrow_crossbow_bundle": {
     "id": "items/arrow_crossbow_bundle",
+    "shipped": false,
     "pack": "items",
     "name": "arrow_crossbow_bundle",
     "kind": "static",
@@ -3907,10 +4428,12 @@ export const ASSETS = {
       "y": 0.73,
       "z": 0.29
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/axe_1handed": {
     "id": "items/axe_1handed",
+    "shipped": false,
     "pack": "items",
     "name": "axe_1handed",
     "kind": "static",
@@ -3922,10 +4445,12 @@ export const ASSETS = {
       "y": 1.24,
       "z": 0.18
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/axe_2handed": {
     "id": "items/axe_2handed",
+    "shipped": false,
     "pack": "items",
     "name": "axe_2handed",
     "kind": "static",
@@ -3937,10 +4462,12 @@ export const ASSETS = {
       "y": 1.72,
       "z": 0.26
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/bow": {
     "id": "items/bow",
+    "shipped": false,
     "pack": "items",
     "name": "bow",
     "kind": "static",
@@ -3952,10 +4479,12 @@ export const ASSETS = {
       "y": 0.16,
       "z": 1.98
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/bow_withString": {
     "id": "items/bow_withString",
+    "shipped": false,
     "pack": "items",
     "name": "bow_withString",
     "kind": "static",
@@ -3967,10 +4496,12 @@ export const ASSETS = {
       "y": 0.16,
       "z": 1.98
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/crossbow_1handed": {
     "id": "items/crossbow_1handed",
+    "shipped": false,
     "pack": "items",
     "name": "crossbow_1handed",
     "kind": "static",
@@ -3982,10 +4513,12 @@ export const ASSETS = {
       "y": 0.41,
       "z": 1.22
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/crossbow_2handed": {
     "id": "items/crossbow_2handed",
+    "shipped": false,
     "pack": "items",
     "name": "crossbow_2handed",
     "kind": "static",
@@ -3997,10 +4530,12 @@ export const ASSETS = {
       "y": 0.48,
       "z": 1.44
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/dagger": {
     "id": "items/dagger",
+    "shipped": false,
     "pack": "items",
     "name": "dagger",
     "kind": "static",
@@ -4012,10 +4547,12 @@ export const ASSETS = {
       "y": 1.21,
       "z": 0.15
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/mug_empty": {
     "id": "items/mug_empty",
+    "shipped": false,
     "pack": "items",
     "name": "mug_empty",
     "kind": "static",
@@ -4027,10 +4564,12 @@ export const ASSETS = {
       "y": 0.49,
       "z": 0.4
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/mug_full": {
     "id": "items/mug_full",
+    "shipped": false,
     "pack": "items",
     "name": "mug_full",
     "kind": "static",
@@ -4042,10 +4581,12 @@ export const ASSETS = {
       "y": 0.55,
       "z": 0.4
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/quiver": {
     "id": "items/quiver",
+    "shipped": false,
     "pack": "items",
     "name": "quiver",
     "kind": "static",
@@ -4057,10 +4598,12 @@ export const ASSETS = {
       "y": 0.93,
       "z": 0.19
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_badge": {
     "id": "items/shield_badge",
+    "shipped": false,
     "pack": "items",
     "name": "shield_badge",
     "kind": "static",
@@ -4072,10 +4615,12 @@ export const ASSETS = {
       "y": 1.02,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_badge_color": {
     "id": "items/shield_badge_color",
+    "shipped": false,
     "pack": "items",
     "name": "shield_badge_color",
     "kind": "static",
@@ -4087,10 +4632,12 @@ export const ASSETS = {
       "y": 1.02,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_round": {
     "id": "items/shield_round",
+    "shipped": false,
     "pack": "items",
     "name": "shield_round",
     "kind": "static",
@@ -4102,10 +4649,12 @@ export const ASSETS = {
       "y": 0.88,
       "z": 0.33
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_round_barbarian": {
     "id": "items/shield_round_barbarian",
+    "shipped": false,
     "pack": "items",
     "name": "shield_round_barbarian",
     "kind": "static",
@@ -4117,10 +4666,12 @@ export const ASSETS = {
       "y": 0.88,
       "z": 0.33
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_round_color": {
     "id": "items/shield_round_color",
+    "shipped": false,
     "pack": "items",
     "name": "shield_round_color",
     "kind": "static",
@@ -4132,10 +4683,12 @@ export const ASSETS = {
       "y": 0.88,
       "z": 0.33
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_spikes": {
     "id": "items/shield_spikes",
+    "shipped": false,
     "pack": "items",
     "name": "shield_spikes",
     "kind": "static",
@@ -4147,10 +4700,12 @@ export const ASSETS = {
       "y": 1.04,
       "z": 0.46
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_spikes_color": {
     "id": "items/shield_spikes_color",
+    "shipped": false,
     "pack": "items",
     "name": "shield_spikes_color",
     "kind": "static",
@@ -4162,10 +4717,12 @@ export const ASSETS = {
       "y": 1.04,
       "z": 0.46
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_square": {
     "id": "items/shield_square",
+    "shipped": false,
     "pack": "items",
     "name": "shield_square",
     "kind": "static",
@@ -4177,10 +4734,12 @@ export const ASSETS = {
       "y": 1.19,
       "z": 0.3
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/shield_square_color": {
     "id": "items/shield_square_color",
+    "shipped": false,
     "pack": "items",
     "name": "shield_square_color",
     "kind": "static",
@@ -4192,10 +4751,12 @@ export const ASSETS = {
       "y": 1.19,
       "z": 0.3
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/smokebomb": {
     "id": "items/smokebomb",
+    "shipped": false,
     "pack": "items",
     "name": "smokebomb",
     "kind": "static",
@@ -4207,10 +4768,12 @@ export const ASSETS = {
       "y": 0.42,
       "z": 0.36
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/spellbook_closed": {
     "id": "items/spellbook_closed",
+    "shipped": false,
     "pack": "items",
     "name": "spellbook_closed",
     "kind": "static",
@@ -4222,10 +4785,12 @@ export const ASSETS = {
       "y": 0.57,
       "z": 0.43
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/spellbook_open": {
     "id": "items/spellbook_open",
+    "shipped": false,
     "pack": "items",
     "name": "spellbook_open",
     "kind": "static",
@@ -4237,10 +4802,12 @@ export const ASSETS = {
       "y": 0.57,
       "z": 0.22
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/staff": {
     "id": "items/staff",
+    "shipped": false,
     "pack": "items",
     "name": "staff",
     "kind": "static",
@@ -4252,10 +4819,12 @@ export const ASSETS = {
       "y": 2.15,
       "z": 0.29
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/sword_1handed": {
     "id": "items/sword_1handed",
+    "shipped": false,
     "pack": "items",
     "name": "sword_1handed",
     "kind": "static",
@@ -4267,10 +4836,12 @@ export const ASSETS = {
       "y": 1.78,
       "z": 0.13
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/sword_2handed": {
     "id": "items/sword_2handed",
+    "shipped": false,
     "pack": "items",
     "name": "sword_2handed",
     "kind": "static",
@@ -4282,10 +4853,12 @@ export const ASSETS = {
       "y": 2.37,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/sword_2handed_color": {
     "id": "items/sword_2handed_color",
+    "shipped": false,
     "pack": "items",
     "name": "sword_2handed_color",
     "kind": "static",
@@ -4297,10 +4870,12 @@ export const ASSETS = {
       "y": 2.37,
       "z": 0.25
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "items/wand": {
     "id": "items/wand",
+    "shipped": false,
     "pack": "items",
     "name": "wand",
     "kind": "static",
@@ -4312,10 +4887,12 @@ export const ASSETS = {
       "y": 0.97,
       "z": 0.16
     },
-    "clips": []
+    "clips": [],
+    "shippedClips": []
   },
   "animations/Rig_Medium_General": {
     "id": "animations/Rig_Medium_General",
+    "shipped": true,
     "pack": "animations",
     "name": "Rig_Medium_General",
     "kind": "animation",
@@ -4343,10 +4920,16 @@ export const ASSETS = {
       "T-Pose",
       "Throw",
       "Use_Item"
+    ],
+    "shippedClips": [
+      "Idle_A",
+      "Interact",
+      "Use_Item"
     ]
   },
   "animations/Rig_Medium_MovementBasic": {
     "id": "animations/Rig_Medium_MovementBasic",
+    "shipped": true,
     "pack": "animations",
     "name": "Rig_Medium_MovementBasic",
     "kind": "animation",
@@ -4370,10 +4953,14 @@ export const ASSETS = {
       "Walking_A",
       "Walking_B",
       "Walking_C"
+    ],
+    "shippedClips": [
+      "Walking_A"
     ]
   },
   "creatures/Wolf": {
     "id": "creatures/Wolf",
+    "shipped": false,
     "pack": "creatures",
     "name": "Wolf",
     "kind": "skinned",
@@ -4398,11 +4985,17 @@ export const ASSETS = {
       "Idle_2_HeadLow",
       "Idle_2",
       "Idle"
-    ]
+    ],
+    "shippedClips": []
   }
 } as const satisfies Record<string, AssetEntry>;
 
 export type AssetId = keyof typeof ASSETS;
+
+/** Modèles livrés dans le jeu (liste blanche tools/shipped-assets.json). Le jeu ne doit référencer que ceux-là. */
+export const SHIPPED_IDS = ["forest/Bush_2_A_Color1","forest/Grass_1_A_Color1","forest/Grass_2_A_Color1","forest/Rock_3_A_Color1","forest/Rock_3_C_Color1","forest/Tree_1_A_Color1","forest/Tree_2_A_Color1","forest/Tree_3_A_Color1","forest/Tree_4_A_Color1","survival/tent-canvas-half","survival/tent-canvas","characters/Knight","characters/Mage","characters/Ranger","characters/Rogue","characters/Rogue_Hooded","animations/Rig_Medium_General","animations/Rig_Medium_MovementBasic"] as const satisfies readonly AssetId[];
+
+export type ShippedAssetId = (typeof SHIPPED_IDS)[number];
 
 export const ASSETS_BY_CATEGORY = {
   "bush": [

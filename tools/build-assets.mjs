@@ -1,6 +1,10 @@
 #!/usr/bin/env node
-// npm run assets — convertit TOUS les packs sources (assets-src/) en assets web optimisés (public/assets/<pack>/)
-// et génère le catalogue typé src/render/assets/asset-catalog.ts.
+// npm run assets — convertit TOUS les packs sources (assets-src/) en assets web optimisés et génère le catalogue
+// typé src/render/assets/asset-catalog.ts.
+// - Conversion complète → assets-all/assets/<pack>/ (gitignoré, servi par `vite dev` pour tools/asset-preview).
+// - Seuls les modèles de la liste blanche tools/shipped-assets.json sont copiés dans public/assets/<pack>/
+//   (versionné, embarqué dans le build), animations réduites aux clips listés. Échec si le total dépasse
+//   maxShippedBytes (docs/design/render-3d.md §4.10).
 //
 // - Textures → WebP (couleur ≤ 1024 px, normal maps ≤ 512 px), PARTAGÉES dans un pack (même nom de fichier) :
 //   le navigateur ne les télécharge qu'une fois.
@@ -14,14 +18,20 @@ import { dedup, prune, resample, textureCompress, meshopt } from "@gltf-transfor
 import { MeshoptEncoder } from "meshoptimizer";
 import sharp from "sharp";
 import { createHash } from "node:crypto";
-import { readdirSync, mkdirSync, rmSync, writeFileSync, copyFileSync, statSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, mkdirSync, rmSync, renameSync, cpSync, writeFileSync, copyFileSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = path.join(root, "assets-src");
-const OUT = path.join(root, "public", "assets");
+const OUT = path.join(root, "assets-all", "assets");
+const SHIPPED_FINAL = path.join(root, "public", "assets");
+// Les modèles livrés sont d'abord écrits dans un dossier de préparation ; public/assets/ (versionné) n'est
+// remplacé qu'à la toute fin, si tout a réussi (sources présentes, liste blanche complète, taille OK).
+const SHIPPED_OUT = path.join(root, "assets-all", ".shipped-staging");
 const CATALOG = path.join(root, "src", "render", "assets", "asset-catalog.ts");
+const SHIPPED = JSON.parse(readFileSync(path.join(root, "tools", "shipped-assets.json"), "utf8"));
+const shippedIds = new Set(Object.keys(SHIPPED.assets));
 
 // [regex sur le nom, catégorie, usage suggéré en jeu]
 const NATURE = [
@@ -84,7 +94,12 @@ await MeshoptEncoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ "meshopt.encoder": MeshoptEncoder });
 const r2 = (n) => Math.round(n * 100) / 100;
 
+if (!existsSync(SRC)) {
+  console.error("✗ assets-src/ absent : rien n'est modifié (public/assets/ versionné conservé).");
+  process.exit(1);
+}
 rmSync(OUT, { recursive: true, force: true });
+rmSync(SHIPPED_OUT, { recursive: true, force: true });
 mkdirSync(path.dirname(CATALOG), { recursive: true });
 
 const entries = [];
@@ -139,9 +154,27 @@ for (const pack of PACKS) {
     docRoot.listBuffers().forEach((b, i) => b.setURI(i === 0 ? `${name}.bin` : `${name}_${i}.bin`));
     await io.write(path.join(outDir, `${name}.gltf`), doc);
 
+    // Modèle livré : copie dans public/assets/<pack>/, animations réduites aux clips de la liste blanche.
+    const id = `${pack.id}/${name}`;
+    const shipped = shippedIds.has(id);
+    const keep = shipped ? SHIPPED.assets[id].clips : undefined;
+    if (shipped) {
+      if (keep) {
+        const missing = keep.filter((c) => !clips.includes(c));
+        if (missing.length) throw new Error(`${id} : clips introuvables ${missing.join(", ")}`);
+        for (const a of docRoot.listAnimations()) if (!keep.includes(a.getName())) a.dispose();
+        await doc.transform(prune({ keepLeaves: true }));
+      }
+      const shippedDir = path.join(SHIPPED_OUT, pack.id);
+      mkdirSync(shippedDir, { recursive: true });
+      await io.write(path.join(shippedDir, `${name}.gltf`), doc);
+      shippedIds.delete(id);
+    }
+
     const [, category, usage] = pack.cats.find(([re]) => re.test(name)) ?? [null, "misc", "Divers"];
     entries.push({
-      id: `${pack.id}/${name}`,
+      id,
+      shipped,
       pack: pack.id,
       name,
       kind: pack.kind,
@@ -150,25 +183,59 @@ for (const pack of PACKS) {
       url: `assets/${pack.id}/${name}.gltf`,
       size: { x: r2(max[0] - min[0]), y: r2(max[1] - min[1]), z: r2(max[2] - min[2]) },
       clips,
+      shippedClips: shipped ? (keep ?? clips) : [],
     });
   }
 
   copyFileSync(path.join(SRC, pack.license), path.join(outDir, "LICENSE.txt"));
+  if (existsSync(path.join(SHIPPED_OUT, pack.id))) {
+    copyFileSync(path.join(SRC, pack.license), path.join(SHIPPED_OUT, pack.id, "LICENSE.txt"));
+  }
   const bytes = readdirSync(outDir).reduce((s, f) => s + statSync(path.join(outDir, f)).size, 0);
   packMeta[pack.id] = { credit: pack.credit, license: `assets/${pack.id}/LICENSE.txt` };
   console.log(`✓ ${pack.id.padEnd(11)} ${String(entries.filter((e) => e.pack === pack.id).length).padStart(3)} modèles  ${(bytes / 1024 / 1024).toFixed(1)} Mo`);
 }
 
+if (shippedIds.size) throw new Error(`Liste blanche : modèles introuvables ${[...shippedIds].join(", ")}`);
+
 const byCategory = {};
 for (const e of entries) (byCategory[e.category] ??= []).push(e.id);
 const union = (xs) => [...new Set(xs)].map((x) => JSON.stringify(x)).join(" | ");
 
+
+const dirBytes = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).reduce(
+    (s, d) => s + (d.isDirectory() ? dirBytes(path.join(dir, d.name)) : statSync(path.join(dir, d.name)).size),
+    0,
+  );
+const shippedBytes = existsSync(SHIPPED_OUT) ? dirBytes(SHIPPED_OUT) : 0;
+console.log(`\n${entries.length} modèles → assets-all/assets/ (aperçu) + ${path.relative(root, CATALOG)}`);
+console.log(`${entries.filter((e) => e.shipped).length} modèles livrés → public/assets/ : ${(shippedBytes / 1024 / 1024).toFixed(2)} Mo`);
+if (shippedBytes > SHIPPED.maxShippedBytes) {
+  console.error(`✗ public/assets/ dépasse ${(SHIPPED.maxShippedBytes / 1024 / 1024).toFixed(1)} Mo : retirer des modèles de tools/shipped-assets.json`);
+  console.error("  public/assets/ et le catalogue n'ont pas été modifiés.");
+  process.exit(1);
+}
+// Tout a réussi : on remplace public/assets/ (versionné) par le dossier de préparation, puis le catalogue.
+rmSync(SHIPPED_FINAL, { recursive: true, force: true });
+if (existsSync(SHIPPED_OUT)) {
+  try {
+    renameSync(SHIPPED_OUT, SHIPPED_FINAL);
+  } catch {
+    // Windows refuse parfois le renommage d'un dossier (EPERM : antivirus, indexeur, fichier ouvert) : on copie.
+    cpSync(SHIPPED_OUT, SHIPPED_FINAL, { recursive: true });
+    rmSync(SHIPPED_OUT, { recursive: true, force: true });
+  }
+}
+
 writeFileSync(
   CATALOG,
   `// ⚠ FICHIER GÉNÉRÉ par tools/build-assets.mjs (npm run assets) — ne pas éditer à la main.
-// Tous les packs sont sous licence CC0 (voir PACKS et public/assets/<pack>/LICENSE.txt).
+// Tous les packs sont sous licence CC0 (voir PACKS et assets-all/assets/<pack>/LICENSE.txt).
 // size : boîte englobante en unités du modèle (≈ mètres ; les échelles diffèrent selon les packs). y = hauteur.
 // kind : "static" (décor, bâtiments), "skinned" (personnage/créature animé), "animation" (clips seuls, pas de mesh).
+// shipped : livré dans le jeu (public/assets/, liste blanche tools/shipped-assets.json) ; sinon aperçu seulement
+// (assets-all/, servi par vite dev). clips = tous les clips (aperçu) ; shippedClips = clips livrés dans le jeu.
 
 export type AssetPack = ${union(entries.map((e) => e.pack))};
 export type AssetKind = "static" | "skinned" | "animation";
@@ -176,6 +243,7 @@ export type AssetCategory = ${union(entries.map((e) => e.category))};
 
 export interface AssetEntry {
   readonly id: string;
+  readonly shipped: boolean;
   readonly pack: AssetPack;
   readonly name: string;
   readonly kind: AssetKind;
@@ -184,17 +252,21 @@ export interface AssetEntry {
   readonly url: string;
   readonly size: { readonly x: number; readonly y: number; readonly z: number };
   readonly clips: readonly string[];
+  readonly shippedClips: readonly string[];
 }
 
 export const ASSETS = ${JSON.stringify(Object.fromEntries(entries.map((e) => [e.id, e])), null, 2)} as const satisfies Record<string, AssetEntry>;
 
 export type AssetId = keyof typeof ASSETS;
 
+/** Modèles livrés dans le jeu (liste blanche tools/shipped-assets.json). Le jeu ne doit référencer que ceux-là. */
+export const SHIPPED_IDS = ${JSON.stringify(entries.filter((e) => e.shipped).map((e) => e.id))} as const satisfies readonly AssetId[];
+
+export type ShippedAssetId = (typeof SHIPPED_IDS)[number];
+
 export const ASSETS_BY_CATEGORY = ${JSON.stringify(byCategory, null, 2)} as const satisfies Partial<Record<AssetCategory, readonly AssetId[]>>;
 
 export const PACKS = ${JSON.stringify(packMeta, null, 2)} as const satisfies Record<AssetPack, { credit: string; license: string }>;
 `,
 );
-
-const total = entries.length;
-console.log(`\n${total} modèles → public/assets/ + ${path.relative(root, CATALOG)}`);
+console.log(`✓ public/assets/ et ${path.relative(root, CATALOG)} mis à jour.`);

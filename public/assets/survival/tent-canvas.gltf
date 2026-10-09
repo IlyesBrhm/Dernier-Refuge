@@ -1,0 +1,228 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.1.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 444,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 296,
+      "max": [
+        32755,
+        28699,
+        32767
+      ],
+      "min": [
+        -32755,
+        -28699,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 296,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 296,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 888,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 165,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 444
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 888,
+      "byteLength": 2368,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 168,
+          "byteLength": 1695,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 296
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3256,
+      "byteLength": 2368,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1864,
+          "byteLength": 906,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 296
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5624,
+      "byteLength": 1184,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2772,
+          "byteLength": 524,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 296
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9728,
+      "minFilter": 9984,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "colormap",
+      "mimeType": "image/webp",
+      "uri": "colormap.webp"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "tent-canvas.bin",
+      "byteLength": 3296
+    },
+    {
+      "byteLength": 6808,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "colormap",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0,
+          "extensions": {
+            "KHR_texture_transform": {
+              "texCoord": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "tent-canvas",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "NORMAL": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "tent-canvas",
+      "translation": [
+        0,
+        0.24568417575210333,
+        0.00550001859664917
+      ],
+      "scale": [
+        0.28050002455711365,
+        0.28050002455711365,
+        0.28050002455711365
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "tent-canvas",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization",
+    "KHR_texture_transform"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization"
+  ]
+}

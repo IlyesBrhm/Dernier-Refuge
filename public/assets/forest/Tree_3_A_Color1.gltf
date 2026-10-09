@@ -1,0 +1,222 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.1.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2934,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 746,
+      "max": [
+        28903,
+        32767,
+        28903
+      ],
+      "min": [
+        -28903,
+        -32767,
+        -28903
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 746,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 746,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 5868,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1145,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 2934
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5868,
+      "byteLength": 5968,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1148,
+          "byteLength": 4180,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 746
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 11836,
+      "byteLength": 2984,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5328,
+          "byteLength": 2340,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 746
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14820,
+      "byteLength": 5968,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 7668,
+          "byteLength": 4331,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 746
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "EXT_texture_webp": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "forest_texture",
+      "mimeType": "image/webp",
+      "uri": "forest_texture.webp"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Tree_3_A_Color1.bin",
+      "byteLength": 12000
+    },
+    {
+      "byteLength": 20788,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "forest",
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.6000000238418579,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Tree_3_A_Color1",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 1,
+            "TEXCOORD_0": 2,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Tree_3_A_Color1",
+      "translation": [
+        -0.005520045757293701,
+        1.4919807761907578,
+        -1.1920928955078125e-7
+      ],
+      "scale": [
+        1.7532987743616104,
+        1.7532987743616104,
+        1.7532987743616104
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_mesh_quantization"
+  ]
+}

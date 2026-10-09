@@ -48,9 +48,47 @@ export interface FxView {
   readonly tilePx: number;
 }
 
+/**
+ * Butin en vol. `x`, `y` : position au sol en unités monde ; `lift` : hauteur de l'arc et `size` :
+ * taille de l'icône, toutes deux en TUILES (le renderer convertit en px ou en mètres).
+ */
+export interface FxFlySample {
+  phase: "fly";
+  x: number;
+  y: number;
+  lift: number;
+  size: number;
+  resource: DropResource;
+}
+
+/** Texte flottant ancré en (`x`, `y`) unités monde, monté de `rise` tuiles, opacité `alpha`. */
+export interface FxTextSample {
+  phase: "text";
+  x: number;
+  y: number;
+  rise: number;
+  alpha: number;
+  text: string;
+  /** Texte grisé (stock plein). */
+  muted: boolean;
+}
+
+export type FxSample = FxFlySample | FxTextSample;
+
+/** Couleurs du texte flottant (partagées avec le calque de la 3D). */
+export const FX_TEXT_COLORS = { ok: TEXT_COLOR_OK, muted: TEXT_COLOR_GROUNDED, stroke: TEXT_STROKE } as const;
+/** Hauteur de départ du texte flottant (tuiles) : la 3D l'ancre à hauteur de tête et n'ajoute que la montée. */
+export const FX_TEXT_START_TILES = TEXT_START_TILES;
+
 export interface FxLayer {
   /** À appeler une fois par tick avec (état avant, état après). */
   onTick(prev: Readonly<GameState>, curr: Readonly<GameState>, nowMs: number): void;
+  /**
+   * Effets actifs à `nowMs`, en coordonnées monde, dans l'ordre du pool (`out` est vidé puis rempli
+   * avec des objets réutilisés : ne pas les conserver d'une image à l'autre). Les effets terminés
+   * sont désactivés au passage.
+   */
+  sample(nowMs: number, player: Readonly<Vec>, out: FxSample[]): FxSample[];
   /** Dessine les effets actifs ; `player` = position interpolée affichée. */
   draw(ctx: CanvasRenderingContext2D, view: FxView, player: Readonly<Vec>, nowMs: number): void;
   /** Nombre d'effets actifs (débogage). */
@@ -61,7 +99,13 @@ export interface FxLayer {
 
 export function createFxLayer(): FxLayer {
   const pool: HarvestFx[] = [];
+  // Échantillons préalloués (un de chaque forme par case du pool) : aucune allocation par image.
+  const flySamples: FxFlySample[] = [];
+  const textSamples: FxTextSample[] = [];
+  const scratch: FxSample[] = [];
   for (let i = 0; i < MAX_FX; i++) {
+    flySamples.push({ phase: "fly", x: 0, y: 0, lift: 0, size: 0, resource: "wood" });
+    textSamples.push({ phase: "text", x: 0, y: 0, rise: 0, alpha: 0, text: "", muted: false });
     pool.push({
       active: false,
       start: 0,
@@ -140,6 +184,8 @@ export function createFxLayer(): FxLayer {
       }
     },
 
+    sample,
+
     draw(ctx, view, player, nowMs): void {
       const tilePx = view.tilePx;
       const px = Math.max(12, Math.round(tilePx * 0.28));
@@ -147,44 +193,29 @@ export function createFxLayer(): FxLayer {
         fontPx = px;
         fontStr = `bold ${px}px system-ui, -apple-system, "Segoe UI", sans-serif`;
       }
-      for (const fx of pool) {
-        if (!fx.active) continue;
-        const t = Math.max(0, nowMs - fx.start);
-        if (t >= TOTAL_MS) {
-          fx.active = false;
-          continue;
-        }
-        const toX = fx.grounded ? fx.groundX : player.x;
-        const toY = fx.grounded ? fx.groundY : player.y;
-        if (t < LOOT_MS) {
-          // Vol en arc : position linéaire + bosse sinusoïdale, lissage smoothstep.
-          const k = t / LOOT_MS;
-          const e = k * k * (3 - 2 * k);
-          const wx = fx.fromX + (toX - fx.fromX) * e;
-          const wy = fx.fromY + (toY - fx.fromY) * e;
-          const lift = Math.sin(Math.PI * k) * ARC_HEIGHT_TILES * tilePx;
-          const size = tilePx * (0.3 - 0.08 * k);
+      for (const s of sample(nowMs, player, scratch)) {
+        if (s.phase === "fly") {
+          const lift = s.lift * tilePx;
+          const size = s.size * tilePx;
           // Ombre au sol.
           ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
           ctx.beginPath();
-          ctx.ellipse(view.sx(wx), view.sy(wy) + size * 0.4, size * 0.5, size * 0.2, 0, 0, Math.PI * 2);
+          ctx.ellipse(view.sx(s.x), view.sy(s.y) + size * 0.4, size * 0.5, size * 0.2, 0, 0, Math.PI * 2);
           ctx.fill();
-          drawResourceIcon(ctx, fx.resource, view.sx(wx), view.sy(wy) - lift, size, Math.max(1, tilePx * 0.03));
+          drawResourceIcon(ctx, s.resource, view.sx(s.x), view.sy(s.y) - lift, size, Math.max(1, tilePx * 0.03));
         } else {
-          const k = (t - LOOT_MS) / TEXT_MS;
-          const alpha = 1 - k * k;
-          const x = view.sx(toX);
-          const y = view.sy(toY) - (TEXT_START_TILES + TEXT_RISE_TILES * k) * tilePx;
-          ctx.globalAlpha = alpha;
+          const x = view.sx(s.x);
+          const y = view.sy(s.y) - s.rise * tilePx;
+          ctx.globalAlpha = s.alpha;
           ctx.font = fontStr;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.lineJoin = "round";
           ctx.lineWidth = Math.max(2, tilePx * 0.06);
           ctx.strokeStyle = TEXT_STROKE;
-          ctx.strokeText(fx.text, x, y);
-          ctx.fillStyle = fx.muted ? TEXT_COLOR_GROUNDED : TEXT_COLOR_OK;
-          ctx.fillText(fx.text, x, y);
+          ctx.strokeText(s.text, x, y);
+          ctx.fillStyle = s.muted ? TEXT_COLOR_GROUNDED : TEXT_COLOR_OK;
+          ctx.fillText(s.text, x, y);
           ctx.globalAlpha = 1;
         }
       }
@@ -200,4 +231,42 @@ export function createFxLayer(): FxLayer {
       for (const fx of pool) fx.active = false;
     },
   };
+
+  function sample(nowMs: number, player: Readonly<Vec>, out: FxSample[]): FxSample[] {
+    out.length = 0;
+    for (let i = 0; i < pool.length; i++) {
+      const fx = pool[i] as HarvestFx;
+      if (!fx.active) continue;
+      const t = Math.max(0, nowMs - fx.start);
+      if (t >= TOTAL_MS) {
+        fx.active = false;
+        continue;
+      }
+      const toX = fx.grounded ? fx.groundX : player.x;
+      const toY = fx.grounded ? fx.groundY : player.y;
+      if (t < LOOT_MS) {
+        // Vol en arc : position linéaire + bosse sinusoïdale, lissage smoothstep.
+        const k = t / LOOT_MS;
+        const e = k * k * (3 - 2 * k);
+        const s = flySamples[i] as FxFlySample;
+        s.x = fx.fromX + (toX - fx.fromX) * e;
+        s.y = fx.fromY + (toY - fx.fromY) * e;
+        s.lift = Math.sin(Math.PI * k) * ARC_HEIGHT_TILES;
+        s.size = 0.3 - 0.08 * k;
+        s.resource = fx.resource;
+        out.push(s);
+      } else {
+        const k = (t - LOOT_MS) / TEXT_MS;
+        const s = textSamples[i] as FxTextSample;
+        s.x = toX;
+        s.y = toY;
+        s.rise = TEXT_START_TILES + TEXT_RISE_TILES * k;
+        s.alpha = 1 - k * k;
+        s.text = fx.text;
+        s.muted = fx.muted;
+        out.push(s);
+      }
+    }
+    return out;
+  }
 }

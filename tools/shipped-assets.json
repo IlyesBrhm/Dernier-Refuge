@@ -1,0 +1,24 @@
+{
+  "$comment": "Liste blanche des modèles livrés dans le jeu (public/assets/, versionné). Voir docs/design/render-3d.md §4.5 et §4.10. Pour animer avec d'autres clips, les ajouter dans 'clips'. Ajouter un modèle ⇒ npm run assets + CREDITS.md.",
+  "maxShippedBytes": 4194304,
+  "assets": {
+    "forest/Tree_1_A_Color1": {},
+    "forest/Tree_2_A_Color1": {},
+    "forest/Tree_3_A_Color1": {},
+    "forest/Tree_4_A_Color1": {},
+    "forest/Rock_3_A_Color1": {},
+    "forest/Rock_3_C_Color1": {},
+    "forest/Grass_1_A_Color1": {},
+    "forest/Grass_2_A_Color1": {},
+    "forest/Bush_2_A_Color1": {},
+    "survival/tent-canvas": {},
+    "survival/tent-canvas-half": {},
+    "characters/Knight": {},
+    "characters/Mage": {},
+    "characters/Ranger": {},
+    "characters/Rogue": {},
+    "characters/Rogue_Hooded": {},
+    "animations/Rig_Medium_General": { "clips": ["Idle_A", "Interact", "Use_Item"] },
+    "animations/Rig_Medium_MovementBasic": { "clips": ["Walking_A"] }
+  }
+}

@@ -9,3 +9,8 @@ coverage/
 
 # Sources 3D brutes (packs CC0 téléchargés), non versionnées
 assets-src/
+# Conversion complète des assets (aperçu local, npm run assets)
+assets-all/
+# Sorties automatiques de Playwright (les captures choisies vont dans captures/, versionné)
+test-results/
+playwright-report/

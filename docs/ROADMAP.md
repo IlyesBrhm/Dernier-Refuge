@@ -12,14 +12,17 @@
 - [x] Arrivée de survivants, file d'attente, accueil, paiement
 - [x] HUD ressources
 
-## Jalon 1.5 — Passage au rendu 3D
+## Jalon 1.5 — Prototype de rendu 3D (2D par défaut, 3D via `?render=3d`) — plan : `docs/design/render-3d.md`
 - [x] 5 packs 3D convertis (`npm run assets`) : nature, forêt, survie, personnages animés + accessoires, loup — catalogue + chargeur + page d'aperçu
-- [ ] Renderer three.js derrière l'interface `Renderer` existante (caméra inclinée, sol, joueur, survivants)
-- [ ] Nœuds de ressources affichés avec les modèles (arbres, buissons, rochers) + état épuisé
-- [ ] Décor instancié (herbe, fleurs, cailloux) + forêt de bordure
-- [ ] Effets/HUD 2D superposés (projection 3D → écran)
-- [ ] Joueur et survivants en personnages animés (marche, idle, interaction)
-- [ ] Bâtiments du camp avec le Survival Kit (tente, feu de camp, emplacements de construction)
+- [x] Liste blanche des modèles livrés (`public/assets/` versionné, 18 modèles, 2,46 Mo) ; conversion complète réservée à l'aperçu
+- [x] Renderer three.js chargé par import dynamique derrière l'interface `Renderer` (caméra perspective inclinée, sol, tapis accueil/file/entrée)
+- [x] Écran de chargement + repli automatique en 2D (WebGL absent, modèles en échec, contexte perdu) + libération mémoire
+- [x] Nœuds de ressources en modèles KayKit (arbres, buissons, rochers) + état épuisé + rebond de repousse
+- [x] Forêt de bordure et décor instanciés
+- [x] Barres, coûts, textes en calque 2D superposé (projection 3D → écran) + butin 3D
+- [x] Joueur et survivants en personnages KayKit animés (marche, idle), variantes de couleur
+- [x] Tentes Kenney (libre / occupée / désordre) et emplacements de construction (contour, coût, anneau)
+- [x] Tests : `buildScene` pur (Vitest) + e2e Playwright (3D sans erreur, capture, repli 2D)
 
 ## Jalon 2 — Sauvegarde
 - [x] Format versionné + checksum + double slot

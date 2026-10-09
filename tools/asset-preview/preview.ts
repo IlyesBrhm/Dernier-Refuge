@@ -46,7 +46,8 @@ function resize(): void {
 }
 addEventListener("resize", resize);
 
-const lib = createAssetLibrary();
+// Aperçu de TOUS les modèles : conversion complète dans assets-all/ (servie par vite dev), pas seulement les livrés.
+const lib = createAssetLibrary("/assets-all/");
 const shown = new THREE.Group();
 scene.add(shown);
 let mixers: THREE.AnimationMixer[] = [];

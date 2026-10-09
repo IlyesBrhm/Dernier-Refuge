@@ -1,7 +1,7 @@
 # Dernier Refuge — Cahier des charges
 
 ## Pitch
-Jeu de gestion-survie vue de dessus (rendu 3D low-poly stylisé, gameplay sur grille), jouable dans le navigateur, inspiré de **My Perfect Hotel** :
+Jeu de gestion-survie vue de dessus (gameplay sur grille ; rendu 2D par défaut, rendu 3D low-poly stylisé en prototype), jouable dans le navigateur, inspiré de **My Perfect Hotel** :
 le joueur gère un **camp de survivants en forêt**. Il accueille des survivants, récolte des ressources,
 agrandit le camp et recrute des travailleurs pour automatiser, au rythme d'un **cycle jour/nuit**,
 de **saisons** et de **menaces nocturnes**.
@@ -35,7 +35,7 @@ de **saisons** et de **menaces nocturnes**.
 - **Testée** : Vitest, chaque règle a ses tests, déterminisme vérifié (même seed + mêmes commandes ⇒ même état).
 - **Anti-triche** : toutes les actions passent par des commandes validées, invariants vérifiés, sauvegarde signée (checksum salé), progression hors-ligne plafonnée, détection d'horloge trafiquée.
 - **Sauvegarde fiable** : versionnée + migrations, double slot A/B avec vérification, autosave, export/import.
-- **Navigateur** : TypeScript + Vite, rendu three.js (caméra orthographique inclinée), assets *Stylized Nature MegaKit* (CC0), 60 FPS sur mobile milieu de gamme, contrôles clavier + tactile.
+- **Navigateur** : TypeScript + Vite, rendu Canvas 2D par défaut ; rendu three.js **en prototype**, activé par `?render=3d` et chargé à la demande (caméra perspective inclinée ~57°, assets KayKit + tentes Kenney, CC0, cf. `docs/design/render-3d.md`), repli automatique en 2D. 60 FPS sur mobile milieu de gamme, contrôles clavier + tactile.
 
 ## Hors périmètre (v1)
 Multijoueur, serveur, achats intégrés, classement en ligne (mais l'architecture le permettra).
