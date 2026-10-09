@@ -1,20 +1,25 @@
-// HUD DOM : lit l'état via les sélecteurs du core, ne le modifie jamais.
-// Le DOM n'est touché que lorsque le texte change (pas de reflow à chaque image).
-//
-// Jour/nuit (docs/design/day-night.md §4.8) : « Jour N » + icône soleil/lune, jauge du feu
-// (role="meter", valeur lue par les lecteurs d'écran), dormeurs la nuit, alertes (role="status").
+// HUD DOM (docs/design/ui-polish.md §1.8, ui-style.md §5, §8) : barre compacte de pilules. Lit l'état via
+// les sélecteurs du core, ne le modifie jamais. DOM touché seulement si un texte / attribut change.
+// Contrat pour les tests : chaque pilule porte `data-hud` = clock | fire | wood | food | queue | tents.
+// Deux groupes (2 rangées au plus sur écran étroit, 1 rangée sinon) : HUD ≤ 12 % de la hauteur.
+// Les alertes du feu ne sont plus ici (toasts) : l'état reste lisible en continu par la jauge du feu
+// (icône + hachures + « ! ») et la pastille File (`lock` + « fermé »).
 
 import {
   clockInfo,
   freeTentCount,
   isFireLow,
-  isFireOutAtNight,
+  isNight,
   queueLength,
   sleepersCount,
   welcomeBlockReason,
   type GameState,
 } from "../core";
-import { FIRE, QUEUE, RESOURCES } from "../data/balance";
+import { FIRE, QUEUE, TIME } from "../data/balance";
+import { createClockArc } from "./clock-arc";
+import { createCounter, type Counter } from "./counter";
+import { formatExact } from "./format";
+import { icon, setIcon } from "./icons";
 
 export interface Hud {
   update(state: Readonly<GameState>): void;
@@ -22,73 +27,7 @@ export interface Hud {
   reset?(): void;
 }
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-/**
- * Ticks de déplacement cumulés (clavier) avant de masquer la ligne d'aide. Sur écran tactile, elle
- * disparaît dès la première utilisation du joystick.
- */
-const HELP_HIDE_MOVE_TICKS = 20;
-
-/** Message complet (alerte) quand le froid a fait fuir des survivants (accueil fermé jusqu'à l'aube). */
-const COLD_LEAVERS_ALERT = "Le froid a fait fuir des survivants : plus personne ne viendra cette nuit";
-
-/**
- * Libellé : texte complet + abréviation. Écran étroit (CSS, ≤ 480 px) : seule l'abréviation est
- * visible, le texte complet reste lu par les lecteurs d'écran (masqué visuellement, pas `display:none`).
- */
-function labelEl(full: string, short?: string): HTMLSpanElement {
-  const label = document.createElement("span");
-  label.className = "hud-label";
-  if (!short || short === full) {
-    label.textContent = full;
-    return label;
-  }
-  const long = document.createElement("span");
-  long.className = "hud-label-full";
-  long.textContent = full;
-  const abbr = document.createElement("span");
-  abbr.className = "hud-label-short";
-  abbr.setAttribute("aria-hidden", "true");
-  abbr.textContent = short;
-  label.append(long, abbr);
-  return label;
-}
-
-/** Valeur « n<sep>max ». */
-interface StatValue {
-  set(value: number, max?: number): void;
-}
-
-/**
- * `minorCap` : le « / max » (plafond de stockage, peu utile) est masqué visuellement sur écran étroit
- * (toujours lu par les lecteurs d'écran). Sinon il reste visible (file, tentes).
- */
-function stat(
-  parent: HTMLElement,
-  name: string,
-  opts: { short?: string; sep?: string; minorCap?: boolean } = {},
-): StatValue {
-  const { short, sep = " / ", minorCap = false } = opts;
-  const item = document.createElement("div");
-  item.className = minorCap ? "hud-stat hud-stat-minor-cap" : "hud-stat";
-  const value = document.createElement("span");
-  value.className = "hud-value";
-  const num = document.createElement("span");
-  const cap = document.createElement("span");
-  cap.className = "hud-cap";
-  value.append(num, cap);
-  item.append(labelEl(name, short), value);
-  parent.appendChild(item);
-  return {
-    set(v, max) {
-      setText(num, String(v));
-      setText(cap, max === undefined ? "" : `${sep}${max}`);
-    },
-  };
-}
-
-function setText(el: HTMLElement, text: string): void {
+function setText(el: Element, text: string): void {
   if (el.textContent !== text) el.textContent = text;
 }
 
@@ -96,198 +35,205 @@ function setAttr(el: Element, name: string, value: string): void {
   if (el.getAttribute(name) !== value) el.setAttribute(name, value);
 }
 
-/** Icône soleil / lune (SVG en ligne, décrite par aria-label). */
-function createSkyIcon(): { root: SVGSVGElement; set(night: boolean): void } {
-  const root = document.createElementNS(SVG_NS, "svg");
-  root.setAttribute("viewBox", "0 0 24 24");
-  root.setAttribute("width", "18");
-  root.setAttribute("height", "18");
-  root.setAttribute("role", "img");
-  root.classList.add("hud-sky");
-  const sun = document.createElementNS(SVG_NS, "g");
-  const disc = document.createElementNS(SVG_NS, "circle");
-  disc.setAttribute("cx", "12");
-  disc.setAttribute("cy", "12");
-  disc.setAttribute("r", "5");
-  disc.setAttribute("fill", "#ffd23f");
-  sun.appendChild(disc);
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const ray = document.createElementNS(SVG_NS, "line");
-    ray.setAttribute("x1", String(12 + Math.cos(a) * 7.5));
-    ray.setAttribute("y1", String(12 + Math.sin(a) * 7.5));
-    ray.setAttribute("x2", String(12 + Math.cos(a) * 10.5));
-    ray.setAttribute("y2", String(12 + Math.sin(a) * 10.5));
-    ray.setAttribute("stroke", "#ffd23f");
-    ray.setAttribute("stroke-width", "2");
-    ray.setAttribute("stroke-linecap", "round");
-    sun.appendChild(ray);
-  }
-  const moon = document.createElementNS(SVG_NS, "path");
-  moon.setAttribute("d", "M15.5 3.5a8.5 8.5 0 1 0 5 15.2A7 7 0 0 1 15.5 3.5z");
-  moon.setAttribute("fill", "#cfd8ff");
-  root.append(sun, moon);
-  let shown: boolean | null = null;
-  return {
-    root,
-    set(night) {
-      if (night === shown) return;
-      shown = night;
-      sun.style.display = night ? "none" : "";
-      moon.style.display = night ? "" : "none";
-      root.setAttribute("aria-label", night ? "Nuit" : "Jour");
-    },
-  };
+function chip(key: string): HTMLDivElement {
+  const el = document.createElement("div");
+  el.className = `hud-chip hud-chip--${key}`;
+  el.dataset.hud = key;
+  return el;
 }
 
-export function createHud(root: HTMLElement, touchHint: boolean): Hud {
+function span(className: string, text = ""): HTMLSpanElement {
+  const s = document.createElement("span");
+  s.className = className;
+  if (text) s.textContent = text;
+  return s;
+}
+
+/** Minutes (arrondies au supérieur) avant la prochaine bascule jour/nuit. */
+function minutesToSwitch(cyclePos: number): { minutes: number; toNight: boolean } {
+  const toNight = cyclePos < TIME.dayTicks;
+  const left = toNight ? TIME.dayTicks - cyclePos : TIME.dayTicks + TIME.nightTicks - cyclePos;
+  return { minutes: Math.max(1, Math.ceil(left / (60 * TIME.ticksPerSecond))), toNight };
+}
+
+function isReduced(): boolean {
+  return document.documentElement.dataset.motion === "reduce";
+}
+
+export function createHud(root: HTMLElement): Hud {
   root.replaceChildren();
+  root.classList.add("hud");
 
-  // --- Ligne du temps : jour, jauge du feu, dormeurs ---
-  const time = document.createElement("div");
-  time.className = "hud-bar hud-time";
-  root.appendChild(time);
+  const groupA = document.createElement("div");
+  groupA.className = "hud-group";
+  const groupB = document.createElement("div");
+  groupB.className = "hud-group";
+  root.append(groupA, groupB);
 
-  const day = document.createElement("div");
-  day.className = "hud-stat hud-day";
-  const sky = createSkyIcon();
-  const dayText = document.createElement("span");
-  dayText.className = "hud-value";
-  day.append(sky.root, dayText);
-  time.appendChild(day);
+  // --- Horloge ---
+  const clock = chip("clock");
+  clock.setAttribute("role", "img");
+  const arc = createClockArc();
+  const dayLong = span("hud-value hud-day hud-day--long");
+  const dayShort = span("hud-value hud-day hud-day--short");
+  dayLong.setAttribute("aria-hidden", "true");
+  dayShort.setAttribute("aria-hidden", "true");
+  clock.append(arc.el, dayLong, dayShort);
 
-  const fire = document.createElement("div");
-  fire.className = "hud-stat hud-fire";
-  const fireLabel = document.createElement("span");
-  fireLabel.className = "hud-label";
-  fireLabel.id = "hud-fire-label";
-  fireLabel.textContent = "Feu";
-  const meter = document.createElement("div");
-  meter.className = "hud-meter";
-  meter.setAttribute("role", "meter");
-  meter.setAttribute("aria-labelledby", "hud-fire-label");
-  meter.setAttribute("aria-valuemin", "0");
-  meter.setAttribute("aria-valuemax", String(FIRE.capacity));
-  const meterFill = document.createElement("div");
-  meterFill.className = "hud-meter-fill";
-  meter.appendChild(meterFill);
-  const fireValue = document.createElement("span");
-  fireValue.className = "hud-value";
-  fireValue.setAttribute("aria-hidden", "true"); // déjà annoncé par le meter
-  fire.append(fireLabel, meter, fireValue);
-  time.appendChild(fire);
-
-  const sleepers = document.createElement("div");
-  sleepers.className = "hud-stat hud-sleepers";
-  const sleepersLabel = labelEl("Dormeurs", "Zz");
-  const sleepersValue = document.createElement("span");
-  sleepersValue.className = "hud-value";
-  sleepers.append(sleepersLabel, sleepersValue);
-  sleepers.hidden = true;
-  time.appendChild(sleepers);
+  // --- Feu ---
+  const fire = chip("fire");
+  fire.setAttribute("role", "meter");
+  fire.setAttribute("aria-label", "Feu");
+  fire.setAttribute("aria-valuemin", "0");
+  fire.setAttribute("aria-valuemax", String(FIRE.capacity));
+  const fireIcon = span("hud-fire-icon");
+  fireIcon.setAttribute("aria-hidden", "true");
+  fireIcon.appendChild(icon("flame", 20));
+  const gauge = document.createElement("div");
+  gauge.className = "gauge hud-fire-pulse";
+  gauge.setAttribute("aria-hidden", "true");
+  const fill = document.createElement("div");
+  fill.className = "gauge__fill";
+  gauge.appendChild(fill);
+  const fireValue = span("hud-value hud-fire-value");
+  fireValue.setAttribute("aria-hidden", "true");
+  const fireBadge = span("badge-alert", "!");
+  fireBadge.setAttribute("aria-hidden", "true");
+  fireBadge.hidden = true;
+  fire.append(fireIcon, gauge, fireValue, fireBadge);
 
   // --- Ressources ---
-  const bar = document.createElement("div");
-  bar.className = "hud-bar";
-  root.appendChild(bar);
-  const wood = stat(bar, "Bois", { minorCap: true });
-  const food = stat(bar, "Nourriture", { short: "Nourr.", minorCap: true });
-  const queue = stat(bar, "File", { sep: "/" });
-  const tents = stat(bar, "Tentes libres", { short: "Tentes" });
+  function resourceChip(key: "wood" | "food"): { el: HTMLDivElement; counter: Counter } {
+    const el = chip(key);
+    el.setAttribute("role", "img");
+    el.appendChild(icon(key === "wood" ? "wood" : "cherry", 20));
+    const counter = createCounter();
+    el.appendChild(counter.el);
+    return { el, counter };
+  }
+  const wood = resourceChip("wood");
+  const food = resourceChip("food");
 
-  // --- Alerte (feu qui faiblit / éteint, accueil fermé) : annoncée poliment, mise à jour seulement si le texte change ---
-  const alert = document.createElement("div");
-  alert.className = "hud-alert";
-  alert.setAttribute("role", "status");
-  alert.setAttribute("aria-live", "polite");
-  root.appendChild(alert);
+  // --- File ---
+  const queue = chip("queue");
+  queue.setAttribute("role", "img");
+  const queueIcon = span("hud-icon");
+  queueIcon.setAttribute("aria-hidden", "true");
+  queueIcon.appendChild(icon("users", 20));
+  const queueValue = span("hud-value");
+  queueValue.setAttribute("aria-hidden", "true");
+  queue.append(queueIcon, queueValue);
 
-  const help = document.createElement("div");
-  help.className = "hud-help";
-  help.textContent = touchHint
-    ? "Glisser le doigt pour se déplacer"
-    : "ZQSD / flèches pour se déplacer";
-  root.appendChild(help);
+  // --- Tentes ---
+  const tents = chip("tents");
+  tents.setAttribute("role", "img");
+  tents.appendChild(icon("tent", 20));
+  const tentsValue = span("hud-value");
+  tentsValue.setAttribute("aria-hidden", "true");
+  const sleepers = span("hud-extra");
+  sleepers.setAttribute("aria-hidden", "true");
+  sleepers.append(span("hud-sep", "·"), icon("moon", 16), span("hud-sleepers"));
+  sleepers.hidden = true;
+  tents.append(tentsValue, sleepers);
+  const sleepersValue = sleepers.querySelector(".hud-sleepers") as HTMLSpanElement;
+
+  groupA.append(clock, fire, wood.el);
+  groupB.append(food.el, queue, tents);
 
   let fireState = "";
-  // Ligne d'aide : masquée après les premiers déplacements (définitivement pour la session).
-  let movedTicks = 0;
-  let lastTick: number | null = null;
-
-  function trackHelp(state: Readonly<GameState>): void {
-    if (help.hidden) return;
-    const moving = state.player.input.dx !== 0 || state.player.input.dy !== 0;
-    if (moving && lastTick !== null && state.tick > lastTick) movedTicks += state.tick - lastTick;
-    lastTick = state.tick;
-    if ((touchHint && moving) || movedTicks >= HELP_HIDE_MOVE_TICKS) help.hidden = true;
-  }
+  let queueClosed: boolean | null = null;
+  let resetPending = false;
 
   return {
     reset(): void {
-      // Le compteur de déplacement repart de l'état chargé (le tick peut reculer) ; l'aide déjà
-      // masquée le reste.
-      lastTick = null;
+      resetPending = true;
     },
     update(state): void {
       const s = state as GameState;
-      trackHelp(state);
-      const clock = clockInfo(s);
-      const night = clock.phase === "night";
-      sky.set(night);
-      setText(dayText, `Jour ${clock.day}`);
+      const now = performance.now();
+      const reduced = isReduced();
 
-      // Jauge du feu.
-      const w = state.fire.wood;
+      // Horloge.
+      const c = clockInfo(s);
+      const night = c.phase === "night";
+      arc.update(c.cyclePos);
+      setText(dayLong, `Jour ${c.day}`);
+      setText(dayShort, `J ${c.day}`);
+      const sw = minutesToSwitch(c.cyclePos);
+      setAttr(
+        clock,
+        "aria-label",
+        `Jour ${c.day}, ${night ? "nuit" : "jour"}, ${sw.minutes} min avant ${sw.toNight ? "la nuit" : "l'aube"}`,
+      );
+
+      // Feu.
+      const w = Math.max(0, state.fire.wood);
       const low = isFireLow(s);
       const out = w <= 0;
-      setText(fireValue, `${w}/${FIRE.capacity}`);
-      setAttr(meter, "aria-valuenow", String(w));
-      setAttr(meter, "aria-valuetext", `${w} bois sur ${FIRE.capacity}${out ? ", éteint" : low ? ", faible" : ""}`);
-      const pct = `${Math.round((Math.min(FIRE.capacity, Math.max(0, w)) / FIRE.capacity) * 100)}%`;
-      if (meterFill.style.width !== pct) meterFill.style.width = pct;
       const st = out ? "out" : low ? "low" : "ok";
+      setText(fireValue, `${w}/${FIRE.capacity}`);
+      setAttr(fire, "aria-valuenow", String(w));
+      setAttr(
+        fire,
+        "aria-valuetext",
+        `${w} bois sur ${FIRE.capacity}${out ? ", éteint" : low ? ", faible" : ""}`,
+      );
+      const ratio = Math.min(1, w / FIRE.capacity);
+      const tf = `scaleX(${ratio.toFixed(3)})`;
+      if (fill.style.transform !== tf) fill.style.transform = tf;
       if (st !== fireState) {
         fireState = st;
         fire.classList.toggle("is-low", st === "low");
         fire.classList.toggle("is-out", st === "out");
+        fire.dataset.state = st;
+        fireBadge.hidden = st !== "low";
+        setIcon(fireIcon, st === "out" ? "fire-out" : "flame", 20);
       }
-
-      // Dormeurs (la nuit).
-      const n = sleepersCount(s);
-      if (sleepers.hidden === night) sleepers.hidden = !night;
-      setText(sleepersValue, String(n));
 
       // Ressources.
-      wood.set(state.resources.wood, RESOURCES.cap);
-      food.set(state.resources.food, RESOURCES.cap);
-      queue.set(queueLength(s), QUEUE.maxLength);
-      tents.set(freeTentCount(s), state.tents.length);
+      if (resetPending) {
+        resetPending = false;
+        wood.counter.reset(state.resources.wood);
+        food.counter.reset(state.resources.food);
+      } else {
+        wood.counter.update(state.resources.wood, now, reduced);
+        food.counter.update(state.resources.food, now, reduced);
+      }
+      setAttr(wood.el, "aria-label", `Bois : ${formatExact(state.resources.wood)}`);
+      setAttr(food.el, "aria-label", `Nourriture : ${formatExact(state.resources.food)}`);
 
-      // Alerte : feu qui faiblit (urgent, des dormeurs peuvent partir) > accueil fermé (raison du core).
+      // File.
+      const q = queueLength(s);
       const block = welcomeBlockReason(s);
-      let text = "";
-      if (low) {
-        text =
-          n > 0
-            ? `Le feu faiblit — ${n} ${n > 1 ? "dormeurs risquent" : "dormeur risque"} de partir`
-            : "Le feu faiblit";
-      } else if (block === "coldLeavers") {
-        text = COLD_LEAVERS_ALERT;
-      } else if (block === "fireOut") {
-        text = "Le feu est éteint — accueil suspendu";
-      } else if (isFireOutAtNight(s)) {
-        text = "Le feu est éteint";
+      const closed = block !== null;
+      if (closed !== queueClosed) {
+        queueClosed = closed;
+        queue.classList.toggle("hud-chip--closed", closed);
+        queue.dataset.state = closed ? "closed" : "open";
+        setIcon(queueIcon, closed ? "lock" : "users", 20);
       }
-      setText(alert, text);
-      const hidden = text === "";
-      if (alert.classList.contains("is-empty") !== hidden) alert.classList.toggle("is-empty", hidden);
-      if (!hidden) {
-        const cls = low ? "is-low" : "is-out";
-        if (!alert.classList.contains(cls)) {
-          alert.classList.remove("is-low", "is-out");
-          alert.classList.add(cls);
-        }
-      }
+      setText(queueValue, closed ? "fermé" : `${q}/${QUEUE.maxLength}`);
+      const why =
+        block === "coldLeavers"
+          ? ", accueil fermé jusqu'à l'aube"
+          : block === "fireOut"
+            ? ", accueil fermé tant que le feu est éteint"
+            : "";
+      setAttr(queue, "aria-label", `File : ${q} sur ${QUEUE.maxLength}${why}`);
+
+      // Tentes (+ dormeurs la nuit).
+      const free = freeTentCount(s);
+      const total = state.tents.length;
+      const n = sleepersCount(s);
+      const showSleepers = isNight(state.tick);
+      setText(tentsValue, `${free}/${total}`);
+      if (sleepers.hidden === showSleepers) sleepers.hidden = !showSleepers;
+      setText(sleepersValue, String(n));
+      setAttr(
+        tents,
+        "aria-label",
+        `Tentes libres : ${free} sur ${total}${showSleepers ? `, ${n} ${n > 1 ? "dormeurs" : "dormeur"}` : ""}`,
+      );
     },
   };
 }

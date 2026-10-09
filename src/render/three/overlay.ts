@@ -6,10 +6,12 @@
 
 import * as THREE from "three";
 import { drawBar, drawLabel, fontFor } from "../canvas-kit";
+import { watchCanvasContextLoss } from "../canvas-loss";
 import { FX_TEXT_COLORS, FX_TEXT_START_TILES, fxTextColor, type FxSample } from "../fx";
-import type { ScreenInsets } from "../renderer";
+import { drawEdgeArrow } from "../guide-edge";
+import type { Quality, ScreenInsets } from "../renderer";
 import { welcomeBlockLines } from "../welcome-block";
-import { ANIM, BAR_COLORS, OVERLAY, TILE_METERS, toMeters } from "./config";
+import { ANIM, BAR_COLORS, GUIDE, OVERLAY, OVERLAY_DPR, TILE_METERS, toMeters } from "./config";
 import type { SceneFrame } from "./scene-model";
 
 export interface Overlay {
@@ -29,6 +31,13 @@ export interface Overlay {
   setInsets(insets: ScreenInsets): void;
   /** Qualité réduite : plafond de DPR abaissé. */
   degrade(): void;
+  /** Qualité choisie : plafond de DPR du calque (Bas : 1). */
+  setQuality(q: Quality): void;
+  /**
+   * Flèche de bord du tutoriel (après `draw`) : cible au sol (m) hors champ ou sous l'interface ⇒
+   * flèche sur le bord de l'écran, hors des zones exclues, orientée vers la cible.
+   */
+  drawGuideEdge(camera: THREE.Camera, target: { x: number; z: number }, nowMs: number, reduced: boolean): void;
   dispose(): void;
 }
 
@@ -36,10 +45,13 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
   const maybe = canvas.getContext("2d", { alpha: true });
   if (!maybe) throw new Error("Canvas 2D indisponible pour le calque");
   const ctx: CanvasRenderingContext2D = maybe;
+  // Calque perdu seul (processus GPU tué) : masqué, sinon son blanc « canvas cassé » couvre la scène 3D.
+  const unwatchLoss = watchCanvasContextLoss(canvas, "calque 3D");
   let cssW = 0;
   let cssH = 0;
   let dpr = 1;
-  let maxDpr: number = coarsePointer ? OVERLAY.maxDprCoarse : OVERLAY.maxDprFine;
+  const baseMaxDpr: number = coarsePointer ? OVERLAY.maxDprCoarse : OVERLAY.maxDprFine;
+  let maxDpr: number = baseMaxDpr;
   let tilePx: number = OVERLAY.minTilePx;
   const v = new THREE.Vector3();
   const pt = { x: 0, y: 0 };
@@ -178,8 +190,27 @@ export function createOverlay(canvas: HTMLCanvasElement, coarsePointer: boolean)
       maxDpr = Math.min(maxDpr, OVERLAY.maxDprDegraded);
     },
 
+    setQuality(q): void {
+      maxDpr = Math.min(baseMaxDpr, OVERLAY_DPR[q]);
+    },
+
+    drawGuideEdge(camera, target, nowMs, reduced): void {
+      v.set(target.x, 0, target.z).project(camera);
+      let x = ((v.x + 1) / 2) * cssW;
+      let y = ((1 - v.y) / 2) * cssH;
+      if (v.z > 1) {
+        // Derrière la caméra : direction inversée autour du centre.
+        x = cssW - x;
+        y = cssH - y;
+      }
+      const wave = reduced ? 0 : Math.sin((nowMs / 1000) * GUIDE.bounceHz * Math.PI * 2);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawEdgeArrow(ctx, x, y, cssW, cssH, insets, wave);
+    },
+
     dispose(): void {
       ro.disconnect();
+      unwatchLoss();
       clear();
     },
 

@@ -26,9 +26,12 @@ import {
 } from "../core";
 import { SURVIVOR, TENT, WELCOME, WORLD, PLAYER } from "../data/balance";
 import { drawBar, drawLabel, fontFor } from "./canvas-kit";
+import { watchCanvasContextLoss } from "./canvas-loss";
 import { fireFlicker, lightingAt, stepLitFade } from "./daylight";
 import { createFxLayer, FX_TEXT_COLORS, type FxView } from "./fx";
+import { drawEdgeArrow, drawGuideArrow } from "./guide-edge";
 import { drawResourceIcon } from "./icons";
+import { GUIDE, TITLE } from "./presentation";
 import { interpolate } from "./interpolate";
 import { prevNodeOf, shownFeedRatio, shownHarvestRatio, shownRegrowRatio } from "./ratios";
 import { BERRIES } from "./shapes";
@@ -130,6 +133,19 @@ export interface ScreenInsets {
   exclude: readonly ScreenRect[];
 }
 
+/**
+ * Présentation (docs/design/ui-polish.md §4.4) : "play" = jeu ; "title" = fond de l'écran titre (camp de
+ * la partie chargée, de nuit, feu forcé allumé À L'IMAGE SEULEMENT, caméra orbitale en 3D).
+ */
+export type Presentation = "play" | "title";
+/** Cible de la flèche du tutoriel, en unités du core (même repère que `Vec`). */
+export interface GuideTarget {
+  x: number;
+  y: number;
+}
+/** Qualité graphique (§4.5). Même union que `Quality` de src/save/prefs.ts (structurellement compatible). */
+export type Quality = "low" | "medium" | "high";
+
 export interface Renderer {
   /** À appeler une fois par tick simulé (détection d'événements visuels, ex. récolte). */
   onTick(prev: Readonly<GameState>, curr: Readonly<GameState>): void;
@@ -138,14 +154,24 @@ export interface Renderer {
   reset(): void;
   /** Libère les ressources (GPU, écouteurs) avant remplacement par un autre renderer. Optionnel. */
   dispose?(): void;
-  /** Zones couvertes par le DOM (libellés masqués dessous). Optionnel : le 2D les ignore. */
+  /** Zones couvertes par le DOM (libellés et flèche de bord évités). */
   setScreenInsets?(insets: ScreenInsets): void;
+  /** Fond de l'écran titre ou jeu. Retour à "play" : caméra recalée sans lissage, vues conservées. */
+  setPresentation?(p: Presentation): void;
+  /** Flèche du tutoriel au-dessus de la cible (null = masquée). Peut être appelé à chaque image. */
+  setGuide?(g: GuideTarget | null): void;
+  /** Qualité graphique, à chaud. N'appeler que si la préférence n'est pas « défaut » (désactive l'adaptation). */
+  setQuality?(q: Quality): void;
+  /** Réduire les animations : orbite du titre figée, flèche immobile. */
+  setReducedMotion?(on: boolean): void;
 }
 
 export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const maybeCtx = canvas.getContext("2d", { alpha: false });
   if (!maybeCtx) throw new Error("Canvas 2D indisponible");
   const ctx: CanvasRenderingContext2D = maybeCtx;
+  // Contexte perdu (processus GPU tué) : canvas masqué au lieu du blanc « canvas cassé » de Chromium.
+  const unwatchLoss = watchCanvasContextLoss(canvas, "rendu 2D");
 
   let cssW = 0;
   let cssH = 0;
@@ -156,10 +182,19 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   let offY = 0;
   let tilePx = 1;
 
+  // Présentation (aucun effet sur l'état) : écran titre, flèche du tutoriel, qualité, mouvement réduit.
+  let presentation: Presentation = "play";
+  let guide: GuideTarget | null = null;
+  let reducedMotion = false;
+  /** Plafond du devicePixelRatio (2D : seul réglage de qualité). 3 = défaut historique. */
+  let maxDpr = 3;
+  let insets: ScreenInsets = { safeTopPx: 0, exclude: [] };
+  const TITLE_LIGHTING = lightingAt(TITLE.lightTick);
+
   function resizeIfNeeded(): void {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    const r = Math.min(window.devicePixelRatio || 1, 3);
+    const r = Math.min(window.devicePixelRatio || 1, maxDpr);
     if (w === cssW && h === cssH && r === dpr) return;
     cssW = w;
     cssH = h;
@@ -692,6 +727,23 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     }
   }
 
+  /**
+   * Flèche du tutoriel : chevron au-dessus de la cible (rebond, sauf mouvement réduit) et flèche de bord
+   * si la cible est hors champ ou sous l'interface. Après le voile de nuit : toujours lisible.
+   */
+  function drawGuide(target: GuideTarget, nowMs: number): void {
+    const x = sx(target.x);
+    const y = sy(target.y);
+    const wave = reducedMotion ? 0 : Math.sin((nowMs / 1000) * GUIDE.bounceHz * Math.PI * 2);
+    const bounce = wave * (GUIDE.bounceM / 2) * tilePx; // 2 m par tuile
+    const size = tilePx * GUIDE.chevronTiles;
+    const tipY = y - tilePx * GUIDE.liftTiles + bounce;
+    if (x > -tilePx && x < cssW + tilePx && tipY > -tilePx && y < cssH + tilePx) {
+      drawGuideArrow(ctx, x, tipY - size / 2, Math.PI / 2, size);
+    }
+    drawEdgeArrow(ctx, x, y, cssW, cssH, insets, wave);
+  }
+
   /** Barre du feu : joueur dans la zone d'alimentation, ou feu qui faiblit. */
   function drawFireBar(state: Readonly<GameState>, ratio: number): void {
     const low = isFireLow(state as GameState);
@@ -715,6 +767,31 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       lastNow = null;
     },
 
+    dispose(): void {
+      unwatchLoss();
+    },
+
+    setScreenInsets(next: ScreenInsets): void {
+      insets = next;
+    },
+
+    setPresentation(p: Presentation): void {
+      presentation = p;
+    },
+
+    setGuide(g: GuideTarget | null): void {
+      guide = g && Number.isFinite(g.x) && Number.isFinite(g.y) ? { x: g.x, y: g.y } : null;
+    },
+
+    setQuality(q: Quality): void {
+      // 2D : seul le pixelRatio change (Bas : 1, Moyen : 1,5, Haut : 2).
+      maxDpr = q === "low" ? 1 : q === "medium" ? 1.5 : 2;
+    },
+
+    setReducedMotion(on: boolean): void {
+      reducedMotion = on;
+    },
+
     draw(prev, curr, alpha): void {
       resizeIfNeeded();
       const now = performance.now();
@@ -723,14 +800,23 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       const a = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 1;
       const pos = interpolate(prev, curr, a);
       const target = harvestTarget(curr);
-      updateCamera(curr, pos.player);
+      const title = presentation === "title";
+      // Écran titre : carte centrée (pas de suivi du joueur).
+      updateCamera(
+        curr,
+        title ? { x: (curr.map.width * U) / 2, y: (curr.map.height * U) / 2 } : pos.player,
+      );
 
-      // Feu et lumière (mêmes courbes que la 3D, temps interpolé).
-      const lit = isFireLit(curr);
+      // Feu et lumière (mêmes courbes que la 3D, temps interpolé). Écran titre : nuit et feu allumé
+      // forcés À L'IMAGE (l'état n'est pas modifié).
+      const lit = title || isFireLit(curr);
       litFade = litFade < 0 ? (lit ? 1 : 0) : stepLitFade(litFade, lit, dt);
       const r0 = fireRatio(prev);
-      const ratio = r0 + (fireRatio(curr) - r0) * a;
-      const lighting = lightingAt(prev.tick + (curr.tick > prev.tick ? (curr.tick - prev.tick) * a : a));
+      const shownRatio = r0 + (fireRatio(curr) - r0) * a;
+      const ratio = title ? Math.max(shownRatio, TITLE.fireMinRatio) : shownRatio;
+      const lighting = title
+        ? TITLE_LIGHTING
+        : lightingAt(prev.tick + (curr.tick > prev.tick ? (curr.tick - prev.tick) * a : a));
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = COLORS.background;
@@ -750,6 +836,9 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
       // Nuit : voile + halos, sous les barres et les textes.
       drawNight(curr, lighting.overlay2D, ratio, litFade, pos.player, now);
+
+      // Écran titre : le camp seul (ni libellés, ni barres, ni effets, ni flèche).
+      if (title) return;
 
       drawZoneLabels(curr);
       drawSlotLabels(curr);
@@ -771,6 +860,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       }
       // Effets (butin en vol, texte flottant) au-dessus de tout.
       fx.draw(ctx, fxView, pos.player, now);
+      // Flèche du tutoriel tout au-dessus.
+      if (guide) drawGuide(guide, now);
     },
   };
 }

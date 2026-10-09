@@ -17,6 +17,11 @@ export interface GameDeps {
   renderer: Renderer;
   hud: Hud;
   input: InputController;
+  /**
+   * Observateur appelé à chaque tick JOUÉ (jamais par `replaceState`, jamais en pause) : détection
+   * d'événements d'interface (notifications, sons, tutoriel). Lecture seule.
+   */
+  onTick?: (prev: Readonly<GameState>, curr: Readonly<GameState>) => void;
 }
 
 export interface Game {
@@ -35,7 +40,7 @@ export interface Game {
   setPaused(paused: boolean): void;
 }
 
-export function startGame({ initialState, renderer, hud, input }: GameDeps): Game {
+export function startGame({ initialState, renderer, hud, input, onTick }: GameDeps): Game {
   let curr: GameState = initialState;
   let prev: GameState = curr;
   let acc = 0;
@@ -77,6 +82,14 @@ export function startGame({ initialState, renderer, hud, input }: GameDeps): Gam
         curr = tick(curr);
         // Détection d'événements visuels tick par tick (jamais par image) : un effet par récolte.
         renderer.onTick(prev, curr);
+        if (onTick) {
+          try {
+            onTick(prev, curr);
+          } catch (e) {
+            // Un observateur d'interface ne doit jamais casser la boucle de jeu.
+            console.error("[game] observateur de tick en échec", e);
+          }
+        }
         if (import.meta.env.DEV) checkDev(curr);
       }
     }

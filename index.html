@@ -2,17 +2,22 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#10140f" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1626" />
+    <meta name="color-scheme" content="dark" />
     <title>Dernier Refuge</title>
+    <link rel="preload" href="/fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/fredoka-latin.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="app">
       <canvas id="game" aria-label="Camp de survivants"></canvas>
-      <div id="hud"></div>
-      <div id="dawn-report" hidden></div>
-      <div id="notices" role="status" aria-live="polite"></div>
-      <div id="menu"></div>
+      <div id="hud" hidden></div>
+      <div id="tutorial" role="region" aria-label="Tutoriel" hidden></div>
+      <div id="controls" hidden></div>
+      <div id="notices"></div>
+      <div id="title" hidden></div>
+      <div id="dialogs"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

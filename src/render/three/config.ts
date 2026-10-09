@@ -323,6 +323,24 @@ export const FOG = {
   tintBlend: 0.08,
 } as const;
 
+/** Écran titre (orbite, éclairage forcé) et flèche du tutoriel : constantes partagées avec la 2D. */
+export { GUIDE, TITLE } from "../presentation";
+
+/**
+ * Niveaux de qualité choisis par le joueur (docs/design/ui-polish.md §4.5). Bas : sans ombres, cartes
+ * libérées, pixelRatio réduit, moins de flammes. Changer de niveau est le SEUL moment où les programmes
+ * peuvent être recompilés (ombres activées / désactivées).
+ */
+export const QUALITY_LEVELS = {
+  low: { shadows: false, pixelRatio: (dpr: number) => 0.75 * Math.min(dpr, 1), sunMap: 0, spotMap: 0, flames: 12 },
+  medium: { shadows: true, pixelRatio: (dpr: number) => Math.min(dpr, 1.5), sunMap: 1024, spotMap: 512, flames: 24 },
+  high: { shadows: true, pixelRatio: (dpr: number) => Math.min(dpr, 2), sunMap: 2048, spotMap: 1024, flames: 24 },
+} as const;
+/** Haut sur pointeur grossier : cartes d'ombre plafonnées. */
+export const QUALITY_HIGH_COARSE_MAPS = { sunMap: 1024, spotMap: 512 } as const;
+/** Plafond du DPR du calque 2D par niveau (Bas : 1). */
+export const OVERLAY_DPR = { low: 1, medium: 2, high: 3 } as const;
+
 export const QUALITY = {
   pixelRatioCoarse: 1.5,
   pixelRatioFine: 2,

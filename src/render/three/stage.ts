@@ -10,7 +10,19 @@
 
 import * as THREE from "three";
 import type { Lighting, Rgb, ShadowOwner } from "../daylight";
-import { CAMERA, COLORS3D, FIRE_LIGHT, FOG, LIGHT, QUALITY, TILE_METERS } from "./config";
+import type { Quality } from "../renderer";
+import {
+  CAMERA,
+  COLORS3D,
+  FIRE_LIGHT,
+  FOG,
+  LIGHT,
+  QUALITY,
+  QUALITY_HIGH_COARSE_MAPS,
+  QUALITY_LEVELS,
+  TILE_METERS,
+  TITLE,
+} from "./config";
 import { portraitFraming, type FramingInput } from "./framing";
 
 /** Lumières locales de l'image (feu, joueur), calculées par la vue du feu et la scène. */
@@ -46,8 +58,21 @@ export interface Stage {
   refreshShadows(): void;
   /** Lumière qui porte l'ombre (lecture e2e). */
   shadowOwner(): ShadowOwner;
-  /** Qualité réduite, une seule fois : pixelRatio 1 et carte d'ombre 1024. */
+  /** Qualité réduite, une seule fois : pixelRatio 1 et carte d'ombre 1024 (ignoré après setQuality). */
   degrade(): void;
+  /**
+   * Caméra orbitale de l'écran titre : autour de `center` (m), angle `yaw` (rad, 0 = au sud, +Z),
+   * rayon / hauteur / visée de TITLE. Le prochain `follow(..., snap = true)` revient à la caméra de jeu.
+   */
+  orbit(center: { x: number; z: number }, yaw: number): void;
+  /**
+   * Qualité choisie (§4.5), à chaud : pixelRatio, ombres (activées / désactivées), tailles des cartes
+   * (libérées en Bas). Seul cas de recompilation admis : les matériaux sont marqués `needsUpdate` au
+   * premier rendu qui suit (cf. prepareRender). Désactive la dégradation adaptative.
+   */
+  setQuality(q: Quality): void;
+  /** À appeler juste avant `renderer.render` : marque les matériaux à recompiler après un changement d'ombres. */
+  prepareRender(): void;
   dispose(): void;
 }
 
@@ -296,6 +321,34 @@ export function createStage(host: HTMLElement, before: Element, coarsePointer: b
   function placeCamera(): void {
     camera.position.set(focus.x, distance * Math.sin(pitch), focus.z + distance * Math.cos(pitch));
     camera.lookAt(focus.x, 0, focus.z);
+    placeSunShadow();
+  }
+
+  // --- Qualité choisie : recompilation des matériaux après bascule des ombres ---
+  let qualityLocked = false;
+  /** Incrémenté à chaque bascule de `shadowMap.enabled` ; 0 = jamais basculé (aucun parcours). */
+  let shadowEpoch = 0;
+  const materialEpoch = new WeakMap<THREE.Material, number>();
+  const markMaterial = (m: THREE.Material): void => {
+    if (materialEpoch.get(m) === shadowEpoch) return;
+    materialEpoch.set(m, shadowEpoch);
+    m.needsUpdate = true;
+  };
+
+  /** Libère la carte d'ombre d'une lumière et fixe sa taille (recréée au prochain rendu d'ombre). */
+  function setShadowMapSize(light: THREE.DirectionalLight | THREE.SpotLight, size: number, release: boolean): void {
+    const changed = size > 0 && light.shadow.mapSize.x !== size;
+    if (changed || release) {
+      light.shadow.map?.dispose();
+      light.shadow.map = null;
+    }
+    if (size > 0) {
+      light.shadow.mapSize.set(size, size);
+      light.shadow.needsUpdate = true;
+    }
+  }
+
+  function placeSunShadow(): void {
     // Ombres centrées sur le point visé, recalées au texel (pas de scintillement en mouvement).
     const texel = (shadowHalf * 2) / sun.shadow.mapSize.x;
     tmp.set(focus.x, 0, focus.z).applyMatrix4(lightBasisInv);
@@ -400,7 +453,53 @@ export function createStage(host: HTMLElement, before: Element, coarsePointer: b
 
     shadowOwner: () => owner,
 
+    orbit(center, yaw): void {
+      resize();
+      focus.x = center.x;
+      focus.z = center.z;
+      focusInit = true;
+      camera.position.set(
+        center.x + Math.sin(yaw) * TITLE.orbitRadius,
+        TITLE.orbitHeight,
+        center.z + Math.cos(yaw) * TITLE.orbitRadius,
+      );
+      camera.lookAt(center.x, TITLE.orbitLookY, center.z);
+      placeSunShadow();
+    },
+
+    setQuality(q): void {
+      qualityLocked = true;
+      const level = QUALITY_LEVELS[q];
+      pixelRatio = level.pixelRatio(window.devicePixelRatio || 1);
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(width, height, false);
+      const coarseHigh = q === "high" && coarsePointer;
+      const sunSize = coarseHigh ? QUALITY_HIGH_COARSE_MAPS.sunMap : level.sunMap;
+      const spotSize = coarseHigh ? QUALITY_HIGH_COARSE_MAPS.spotMap : level.spotMap;
+      // Bas : cartes libérées (aucune n'est recréée tant que shadowMap.enabled = false).
+      setShadowMapSize(sun, sunSize, !level.shadows);
+      setShadowMapSize(fireSpot, spotSize, !level.shadows);
+      if (renderer.shadowMap.enabled !== level.shadows) {
+        renderer.shadowMap.enabled = level.shadows;
+        // Le programme dépend de shadowMap.enabled : recompilation au prochain rendu (seul cas admis).
+        shadowEpoch++;
+      }
+    },
+
+    prepareRender(): void {
+      if (shadowEpoch === 0) return;
+      // Parcours de toute la scène (objets masqués compris) : un matériau apparu après la bascule
+      // (personnage sorti du pool, décor reconstruit) est aussi marqué, une seule fois par bascule.
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        if (!m) return;
+        if (Array.isArray(m)) for (const x of m) markMaterial(x);
+        else markMaterial(m);
+      });
+    },
+
     degrade(): void {
+      if (qualityLocked) return;
       pixelRatio = 1;
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height, false);

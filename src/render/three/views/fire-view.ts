@@ -48,6 +48,8 @@ export class FireView {
   private readonly embers: THREE.Mesh;
   private litFade = -1;
   private lastLit: boolean | null = null;
+  /** Nombre max de particules de flamme (qualité : 12 en Bas, 24 sinon). */
+  private flameBudget: number = FIRE3D.flameCount;
   private readonly emberColor = new THREE.Color();
   private readonly emberOut = new THREE.Color(COLORS3D.emberOut);
   private readonly emberGlow = new THREE.Color(COLORS3D.emberGlow);
@@ -92,6 +94,11 @@ export class FireView {
     this.smoke.geometry.setDrawRange(0, FIRE3D.smokeCount);
   }
 
+  /** Qualité : nombre max de particules de flamme (borné à [1, FIRE3D.flameCount]). */
+  setFlameBudget(n: number): void {
+    this.flameBudget = Math.min(FIRE3D.flameCount, Math.max(1, Math.round(n)));
+  }
+
   /** Oublie la mémoire de vue (nouvelle partie, import). */
   reset(): void {
     this.litFade = -1;
@@ -114,7 +121,7 @@ export class FireView {
     const showFlames = fade > 0.001;
     this.flames.visible = showFlames;
     if (showFlames) {
-      const count = Math.max(1, Math.ceil(FIRE3D.flameCount * Math.max(ratio, 0.05)));
+      const count = Math.max(1, Math.ceil(this.flameBudget * Math.max(ratio, 0.05)));
       const g = this.flames.geometry;
       const pos = g.getAttribute("position") as THREE.BufferAttribute;
       const col = g.getAttribute("color") as THREE.BufferAttribute;

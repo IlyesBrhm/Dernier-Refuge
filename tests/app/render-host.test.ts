@@ -117,6 +117,142 @@ describe("createRenderHost — swap", () => {
   });
 });
 
+/** Faux renderer avec les méthodes optionnelles de présentation (journalisées avec leurs arguments). */
+function fakeFull(name: string, log: Call[]): Renderer {
+  const r = fake(name, log);
+  r.setScreenInsets = (i) => log.push(`${name}.setScreenInsets(${JSON.stringify(i)})`);
+  r.setPresentation = (p) => log.push(`${name}.setPresentation(${p})`);
+  r.setGuide = (g) => log.push(`${name}.setGuide(${JSON.stringify(g)})`);
+  r.setQuality = (q) => log.push(`${name}.setQuality(${q})`);
+  r.setReducedMotion = (on) => log.push(`${name}.setReducedMotion(${on})`);
+  return r;
+}
+
+describe("createRenderHost — présentation (titre, flèche, qualité, mouvement réduit)", () => {
+  it("relaie setPresentation / setGuide / setQuality / setReducedMotion au renderer courant", () => {
+    const log: Call[] = [];
+    const host = createRenderHost(fakeFull("a", log));
+    host.setPresentation("title");
+    host.setGuide({ x: 7500, y: 9500 });
+    host.setGuide(null);
+    host.setQuality("low");
+    host.setReducedMotion(true);
+    expect(log).toEqual([
+      "a.setPresentation(title)",
+      'a.setGuide({"x":7500,"y":9500})',
+      "a.setGuide(null)",
+      "a.setQuality(low)",
+      "a.setReducedMotion(true)",
+    ]);
+  });
+
+  it("renderer sans ces méthodes optionnelles : aucun appel ne lève (relais et swap)", () => {
+    const host = createRenderHost(fake("a", []));
+    expect(() => {
+      host.setPresentation("title");
+      host.setGuide({ x: 1, y: 2 });
+      host.setQuality("high");
+      host.setReducedMotion(false);
+      host.setScreenInsets({ safeTopPx: 10, exclude: [] });
+      host.swap(fake("b", []));
+    }).not.toThrow();
+  });
+
+  it("après swap : reset PUIS réapplication des DERNIÈRES valeurs (insets, présentation, flèche, qualité, mouvement)", () => {
+    const log: Call[] = [];
+    const host = createRenderHost(fakeFull("a", log));
+    host.setScreenInsets({ safeTopPx: 40, exclude: [] });
+    host.setPresentation("title");
+    host.setPresentation("play");
+    host.setGuide({ x: 1, y: 2 });
+    host.setGuide({ x: 3, y: 4 });
+    host.setQuality("high");
+    host.setQuality("medium");
+    host.setReducedMotion(true);
+    log.length = 0;
+    host.swap(fakeFull("b", log));
+    expect(log).toEqual([
+      "a.dispose",
+      "b.reset",
+      'b.setScreenInsets({"safeTopPx":40,"exclude":[]})',
+      "b.setPresentation(play)",
+      'b.setGuide({"x":3,"y":4})',
+      "b.setQuality(medium)",
+      "b.setReducedMotion(true)",
+    ]);
+  });
+
+  it("flèche masquée (null) avant le swap : réappliquée comme null", () => {
+    const log: Call[] = [];
+    const host = createRenderHost(fakeFull("a", log));
+    host.setGuide({ x: 3, y: 4 });
+    host.setGuide(null);
+    log.length = 0;
+    host.swap(fakeFull("b", log));
+    expect(log).toContain("b.setGuide(null)");
+  });
+
+  it("réglages jamais fixés ⇒ rien réappliqué (la qualité reste au défaut de l'appareil + adaptation)", () => {
+    const log: Call[] = [];
+    const host = createRenderHost(fakeFull("a", log));
+    host.swap(fakeFull("b", log));
+    expect(log).toEqual(["a.dispose", "b.reset"]);
+  });
+
+  it("dispose de l'ancien qui lève : le nouveau reçoit quand même reset + réglages", () => {
+    const log: Call[] = [];
+    const a = fakeFull("a", log);
+    a.dispose = () => {
+      throw new Error("boom");
+    };
+    const host = createRenderHost(a);
+    host.setPresentation("title");
+    host.setQuality("low");
+    log.length = 0;
+    expect(() => host.swap(fakeFull("b", log))).toThrow("boom");
+    expect(log).toEqual(["b.reset", "b.setPresentation(title)", "b.setQuality(low)"]);
+  });
+
+  it("swaps successifs : chaque nouveau renderer reçoit les réglages ; l'ancien n'est plus appelé", () => {
+    const log: Call[] = [];
+    const host = createRenderHost(fakeFull("a", log));
+    host.setReducedMotion(true);
+    host.swap(fakeFull("b", log));
+    host.swap(fakeFull("c", log));
+    log.length = 0;
+    host.setPresentation("title");
+    host.setGuide({ x: 5, y: 6 });
+    expect(log).toEqual(["c.setPresentation(title)", 'c.setGuide({"x":5,"y":6})']);
+  });
+
+  it("la cible de la flèche est copiée : modifier l'objet après coup ne change pas ce qui est réappliqué", () => {
+    const log: Call[] = [];
+    const host = createRenderHost(fakeFull("a", log));
+    const g = { x: 1, y: 2 };
+    host.setGuide(g);
+    g.x = 999;
+    log.length = 0;
+    host.swap(fakeFull("b", log));
+    expect(log).toContain('b.setGuide({"x":1,"y":2})');
+  });
+
+  it("info() : défauts, puis valeurs courantes ; copie gelée ; survit au swap", () => {
+    const host = createRenderHost(fakeFull("a", []));
+    expect(host.info()).toEqual({ presentation: "play", guide: false, quality: null, reducedMotion: false });
+    host.setPresentation("title");
+    host.setGuide({ x: 1, y: 1 });
+    host.setQuality("low");
+    host.setReducedMotion(true);
+    const i = host.info();
+    expect(i).toEqual({ presentation: "title", guide: true, quality: "low", reducedMotion: true });
+    expect(Object.isFrozen(i)).toBe(true);
+    host.swap(fakeFull("b", []));
+    expect(host.info()).toEqual(i);
+    host.setGuide(null);
+    expect(host.info().guide).toBe(false);
+  });
+});
+
 describe("createRenderHost — onFirstDraw", () => {
   it("appelé après le premier draw seulement (pas sur onTick ni reset), une seule fois", () => {
     const log: Call[] = [];

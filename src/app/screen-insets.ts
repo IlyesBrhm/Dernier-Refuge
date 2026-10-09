@@ -1,11 +1,12 @@
-// Mesure des zones de l'écran couvertes par l'interface DOM (bas du HUD, bouton Menu), relativement
-// au canvas #game, à la création puis à chaque redimensionnement. Le renderer s'en sert pour ne pas
-// dessiner de libellés dessous. Aucune lecture du DOM par image : uniquement sur ResizeObserver.
+// Mesure des zones de l'écran couvertes par l'interface DOM (bas du HUD, boutons, tutoriel,
+// notifications), relativement au canvas #game, à la création puis à chaque redimensionnement. Le
+// renderer s'en sert pour ne pas dessiner de libellés ni la flèche de bord dessous. Aucune lecture du
+// DOM par image : uniquement sur ResizeObserver (apparition / disparition comprises).
 
 import type { ScreenInsets, ScreenRect } from "../render/renderer";
 
 export interface ScreenInsetsWatcher {
-  /** Remesure immédiatement (ex. après création du bouton Menu). */
+  /** Remesure immédiatement. */
   measure(): void;
   dispose(): void;
 }
@@ -13,9 +14,8 @@ export interface ScreenInsetsWatcher {
 export function watchScreenInsets(
   canvas: HTMLElement,
   hud: HTMLElement,
-  menuRoot: HTMLElement,
   apply: (insets: ScreenInsets) => void,
-  /** Autres éléments DOM à exclure quand ils sont visibles (ex. bilan de l'aube). */
+  /** Autres éléments DOM à exclure quand ils sont visibles (boutons, tutoriel, notifications). */
   extra: readonly HTMLElement[] = [],
 ): ScreenInsetsWatcher {
   let raf = 0;
@@ -30,22 +30,18 @@ export function watchScreenInsets(
       bottom: r.bottom - base.top,
     });
     const exclude: ScreenRect[] = [];
-    const toggle = menuRoot.querySelector<HTMLElement>(".menu-toggle");
-    if (toggle) {
-      const r = toggle.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) exclude.push(rel(r));
-    }
     for (const el of extra) {
-      const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) exclude.push(rel(r));
+      // Boîtes réelles des enfants visibles (un conteneur pleine largeur ne doit pas tout exclure).
+      const kids = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+      const targets = kids.length > 0 ? kids : [el];
+      for (const t of targets) {
+        const r = t.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) exclude.push(rel(r));
+      }
     }
     apply({ safeTopPx: hudBottom(base), exclude });
   }
 
-  /**
-   * Bas de TOUT le HUD (pastilles + ligne d'aide), relatif au canvas : max du conteneur et de chaque
-   * enfant visible (un enfant qui déborderait du conteneur reste couvert).
-   */
   function hudBottom(base: DOMRect): number {
     let bottom = -Infinity;
     const take = (el: Element): void => {
@@ -57,7 +53,6 @@ export function watchScreenInsets(
     return Number.isFinite(bottom) ? Math.max(0, bottom - base.top) : 0;
   }
 
-  /** Regroupe les notifications d'une même image (HUD + canvas + fenêtre). */
   function schedule(): void {
     if (raf === 0) raf = window.requestAnimationFrame(measure);
   }
@@ -65,8 +60,17 @@ export function watchScreenInsets(
   const ro = new ResizeObserver(schedule);
   ro.observe(canvas);
   ro.observe(hud);
-  // Apparition / disparition (hidden) d'un élément observé = changement de taille signalé.
-  for (const el of extra) ro.observe(el);
+  for (const el of extra) {
+    ro.observe(el);
+    for (const c of Array.from(el.children)) ro.observe(c);
+  }
+  // Enfants ajoutés / retirés (toasts, carte) : réobservés.
+  const mo = new MutationObserver((records) => {
+    for (const r of records) r.addedNodes.forEach((n) => n instanceof Element && ro.observe(n));
+    schedule();
+  });
+  for (const el of extra) mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  mo.observe(hud, { attributes: true, attributeFilter: ["hidden"] });
   window.addEventListener("resize", schedule);
   measure();
 
@@ -74,6 +78,7 @@ export function watchScreenInsets(
     measure,
     dispose(): void {
       ro.disconnect();
+      mo.disconnect();
       window.removeEventListener("resize", schedule);
       if (raf !== 0) window.cancelAnimationFrame(raf);
       raf = 0;

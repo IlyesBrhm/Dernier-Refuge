@@ -34,6 +34,7 @@ import { tick } from "../../src/core/tick";
 import type { LightPhase } from "../../src/core/time";
 import { exportSave } from "../../src/save/index";
 import { attentiveFireGoal, botGoal, steer } from "../core/helpers";
+import { hudExpect, type HudExpect } from "./hud-expect";
 
 /** Seed fixe des scénarios (même seed que les autres captures). */
 export const DAYNIGHT_SEED = 7;
@@ -70,6 +71,8 @@ export interface DayNightExpect {
   isNight: boolean;
   /** Bilan affiché par #dawn-report (aube seulement), sinon null. */
   report: NightReport | null;
+  /** Textes accessibles du HUD (contrat `data-hud`, docs/design/ui-polish.md §1.8). */
+  hud: HudExpect;
 }
 
 export interface DayNightCase {
@@ -153,6 +156,7 @@ export function expectedFor(s: GameState): DayNightExpect {
     sleepers: sleepersCount(s),
     isNight: night,
     report: clock.light === "dawn" ? nightReport(s) : null,
+    hud: hudExpect(s),
   };
 }
 

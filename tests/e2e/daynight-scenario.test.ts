@@ -65,6 +65,23 @@ describe("scénarios jour/nuit (e2e et captures)", () => {
     expect(sc.dawn.expect).toMatchObject({ dayLabel: "Jour 2", sky: "Jour", light: "dawn", shadow: "sun" });
   });
 
+  it("textes accessibles du HUD (contrat data-hud, ui-polish §1.8) pour les états connus", () => {
+    // Jour 1, tick 1200 : 1200 ticks avant la nuit = 2 min.
+    expect(sc.day.expect.hud.clockLabel).toBe("Jour 1, jour, 2 min avant la nuit");
+    expect(sc.day.expect.hud.fireState).toBe("ok");
+    expect(sc.day.expect.hud.queueState).toBe("open");
+    expect(sc.day.expect.hud.tentsLabel).toMatch(/^Tentes libres : \d+ sur \d+$/); // pas de dormeurs le jour
+    // Nuit : « X min avant l'aube », dormeurs annoncés.
+    expect(sc.nightLit.expect.hud.clockLabel).toMatch(/^Jour 1, nuit, \d+ min avant l'aube$/);
+    expect(sc.nightLit.expect.hud.tentsLabel).toMatch(/, \d+ dormeurs?$/);
+    expect(sc.nightLow.expect.hud.fireState).toBe("low");
+    expect(sc.nightLow.expect.hud.fireValueText).toMatch(/, faible$/);
+    expect(sc.nightOut.expect.hud).toMatchObject({ fireState: "out", queueState: "closed", fireValueText: `0 bois sur ${FIRE.capacity}, éteint` });
+    expect(sc.nightOut.expect.hud.queueLabel).toMatch(/, accueil fermé jusqu'à l'aube$/);
+    expect(sc.nightFireOut.expect.hud.queueLabel).toMatch(/, accueil fermé tant que le feu est éteint$/);
+    expect(sc.dawn.expect.hud.clockLabel).toMatch(/^Jour 2, jour, \d+ min avant la nuit$/);
+  });
+
   it("bilan de l'aube = compteurs de la nuit 1 (woodEarned cohérent avec les payés et les partis au froid)", () => {
     const r = sc.dawn.expect.report;
     expect(r).not.toBeNull();

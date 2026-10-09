@@ -18,6 +18,8 @@
 //   cohérent avec l'heure). Gonfler `tick` reste la limite principale : ces bornes croissent aussi avec lui.
 // - Migration v1 → v2 : n'ajoute que le feu plein + bilan à 0, endort les `resting` d'une v1 tombant la
 //   nuit et écarte joueur/survivants de la nouvelle tuile F ; une v1 mal formée ou incohérente est refusée.
+// - Préférences (prefs.ts, clé `dernier-refuge.prefs`) : NON signées, validées champ par champ à chaque
+//   lecture. Elles n'ont aucun effet de gameplay ; les forger permet au pire de masquer le tutoriel.
 // - Seule une vérification serveur (rejouer le journal des commandes sur le core déterministe) rendrait
 //   la triche réellement impossible ; l'architecture le permet, hors périmètre v1.
 
@@ -116,6 +118,34 @@ export {
   type WriteError,
   type WriteResult,
 } from "./slots";
+export {
+  DEFAULT_PREFS,
+  defaultPrefs,
+  defaultQuality,
+  effectiveReducedMotion,
+  loadPrefs,
+  parsePrefs,
+  PREFS_KEY,
+  PREFS_MAX_CHARS,
+  PREFS_VERSION,
+  QUALITIES,
+  REDUCED_MOTION_PREFS,
+  resolveQuality,
+  savePrefs,
+  serializePrefs,
+  TUTORIAL_DONE_MAX,
+  TUTORIAL_STATUSES,
+  VOLUME_MAX,
+  VOLUME_MIN,
+  type Prefs,
+  type PrefsLoadResult,
+  type PrefsParseResult,
+  type PrefsStatus,
+  type Quality,
+  type ReducedMotionPref,
+  type TutorialPrefs,
+  type TutorialStatus,
+} from "./prefs";
 export {
   createLeaseLock,
   createWebLock,

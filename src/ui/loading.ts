@@ -14,7 +14,7 @@ export function createLoadingScreen(root: HTMLElement): LoadingScreen {
   const title = document.createElement("p");
   title.className = "loading-title";
   title.id = "loading-title";
-  title.textContent = "Chargement du camp en 3D…";
+  title.textContent = "Chargement du camp…";
   const bar = document.createElement("div");
   bar.className = "loading-bar";
   bar.setAttribute("role", "progressbar");
@@ -38,7 +38,8 @@ export function createLoadingScreen(root: HTMLElement): LoadingScreen {
       const pct = Math.round(Math.min(1, Math.max(0, Number.isFinite(ratio) ? ratio : 0)) * 100);
       if (pct === shown) return;
       shown = pct;
-      fill.style.width = `${pct}%`;
+      // transform seulement (ui-style.md §6) : aucune mise en page recalculée.
+      fill.style.transform = `scaleX(${pct / 100})`;
       bar.setAttribute("aria-valuenow", String(pct));
       bar.setAttribute("aria-valuetext", `${pct} %`);
     },

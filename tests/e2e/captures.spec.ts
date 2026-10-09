@@ -1,27 +1,38 @@
 // Captures de référence (projet Playwright « captures », `npm run captures`). Sortie dans captures/
 // (les captures automatiques d'échec restent dans test-results/).
 // La 3D est le rendu par défaut (docs/design/day-night.md §0) : la capture 2D force `?render=2d`.
-// Les bandeaux (#notices) sont masqués avant chaque capture : celui de la partie de test (?seed=)
-// n'est pas fermable.
+// Le jeu démarre sur l'écran titre (docs/design/ui-polish.md) : chaque capture de jeu passe par
+// `enterGame` ; préférences pré-remplies avec le tutoriel terminé sauf pour les captures du tutoriel.
+// Les notifications (#notices) sont masquées avant chaque capture : le bandeau de la partie de test
+// (?seed=) n'est pas fermable.
 // - camp-3d-*.png / camp-2d-desktop.png : seed fixe (`?seed=` = partie temporaire), cadrage par défaut.
-// - camp-3d-midgame-*.png : sauvegarde construite par le core, importée par le menu (section plus bas).
+// - camp-3d-midgame-*.png : sauvegarde construite par le core, importée par la pause (section plus bas).
 // - day-night-*.png : états jour/nuit construits par le core (tests/e2e/daynight-scenario.ts),
-//   importés par le menu, horloge gelée avant « Confirmer » (section plus bas).
+//   importés par la pause, horloge gelée avant la confirmation (section plus bas).
+// - ui-*.png : écran titre, HUD de jour / de nuit, flèche du tutoriel, pause, paramètres, mobile.
 
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { buildDayNightScenarios, type DayNightKey } from "./daynight-scenario";
 import {
+  enterGame,
   expectHud,
+  expectPanel,
   expectWelcomeMat,
+  freezeClock,
   hideNotices,
-  hudValue,
+  hudLabel,
+  hudNumber,
   importViaMenu,
+  installPageClock,
+  openPause,
   openWithState,
   render3dInfo,
+  seedPrefs,
   waitFirst3DFrame,
   waitFrames,
   waitLoopTime,
   waitReady,
+  waitTitle,
   watch,
   WEBGL_LAUNCH,
   writeSaveFile,
@@ -29,6 +40,17 @@ import {
 import { buildMidgameScenario } from "./midgame-scenario";
 
 test.use(WEBGL_LAUNCH);
+
+/** Captures de l'interface : animations CSS figées, curseur texte masqué. */
+const SHOT = { animations: "disabled", caret: "hide" } as const;
+
+/** Polices prêtes (Fredoka, Nunito) avant une capture. */
+async function fontsReady(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  expect(await page.evaluate(() => document.fonts.check("16px Nunito") && document.fonts.check("600 16px Fredoka"))).toBe(true);
+}
 
 const SEED = 7;
 /**
@@ -118,15 +140,15 @@ function installCaptureClock(freezeAfterMs: number): void {
     return realNow();
   };
   const realRaf = window.requestAnimationFrame.bind(window);
+  // Valeur EXACTE du bois : aria-label « Bois : 1 234 » de la pilule data-hud="wood" (mis à jour à
+  // chaque image ; le compteur visible, lui, défile vers la cible).
   const hudWood = (): number | null => {
-    for (const stat of Array.from(document.querySelectorAll("#hud .hud-stat"))) {
-      // Libellé complet (accessible) : .hud-label-full s'il y a une abréviation, sinon .hud-label.
-      const label = stat.querySelector(".hud-label-full") ?? stat.querySelector(".hud-label");
-      if (label?.textContent !== "Bois") continue;
-      const n = Number.parseInt(stat.querySelector(".hud-value")?.textContent ?? "", 10);
-      return Number.isFinite(n) ? n : null;
-    }
-    return null;
+    const label = document.querySelector('#hud [data-hud="wood"]')?.getAttribute("aria-label") ?? "";
+    const spaces = String.fromCharCode(0x202f, 0xa0, 0x20);
+    const m = label.match(new RegExp(`:\\s*([\\d${spaces}]+)$`));
+    if (!m) return null;
+    const n = Number((m[1] ?? "").replace(new RegExp(`[${spaces}]`, "g"), ""));
+    return Number.isFinite(n) ? n : null;
   };
   window.requestAnimationFrame = (cb: FrameRequestCallback): number =>
     realRaf((t) => {
@@ -159,15 +181,17 @@ async function captureMidgame(page: Page, testInfo: TestInfo, out: string): Prom
   );
 
   const p = watch(page);
+  await seedPrefs(page);
   await page.addInitScript(installCaptureClock, FREEZE_AFTER_MS);
   await page.goto("/"); // 3D par défaut, sans ?seed= : partie persistante, stockage vide (contexte neuf)
   await waitReady(page);
   await expect(page.locator("#app")).toHaveAttribute("data-render", "3d");
+  await enterGame(page, "new");
   await hideNotices(page);
   // La partie de départ (seed aléatoire) ne doit pas déjà afficher le bois attendu.
-  expect(Number.parseInt(await hudValue(page, "Bois"), 10)).not.toBe(sc.woodAfter);
+  expect(await hudNumber(page, "wood")).not.toBe(sc.woodAfter);
 
-  // Import par le menu ; menu ouvert = jeu en pause : on arme la détection avant de reprendre.
+  // Import par la pause ; pause ouverte = jeu arrêté : on arme la détection avant de reprendre.
   await importViaMenu(page, savePath, async () => {
     await page.evaluate((wood) => {
       (window as unknown as { __capture: CaptureClock }).__capture.expectWood = wood;
@@ -195,10 +219,10 @@ async function captureMidgame(page: Page, testInfo: TestInfo, out: string): Prom
   expect(flightMs, "image gelée hors de la phase de vol du butin (temps virtuel)").toBeLessThan(LOOT_FLIGHT_MS - 50);
 
   // Vérifications (HUD) avant la capture : la page est bien dans l'état du scénario.
-  expect(Number.parseInt(await hudValue(page, "Bois"), 10)).toBe(sc.woodAfter);
-  const queue = Number.parseInt(await hudValue(page, "File"), 10);
+  expect(await hudNumber(page, "wood")).toBe(sc.woodAfter);
+  const queue = Number.parseInt((await hudLabel(page, "queue")).match(/^File : (\d+) sur/)?.[1] ?? "", 10);
   if (!(queue >= 2)) throw new Error(`file d'attente vide ou trop courte au moment de la capture (File = ${queue}) : capture refusée`);
-  expect(await hudValue(page, "Tentes libres")).toBe(`0 / ${sc.atFinish.tents.length}`);
+  expect(await hudLabel(page, "tents")).toMatch(new RegExp(`^Tentes libres : 0 sur ${sc.atFinish.tents.length}\\b`));
 
   await hideNotices(page); // un toast d'import a pu apparaître
   await waitFrames(page, 2); // images identiques (horloge gelée)
@@ -258,30 +282,142 @@ async function captureDayNight(page: Page, testInfo: TestInfo, key: DayNightKey,
 }
 
 // ------------------------------------------------------------------------------------------------
+// Interface (ui-*.png, docs/design/ui-polish.md §6.3) : seed fixe (`?seed=7`, partie temporaire),
+// horloge gelée avant la capture (orbite du titre, flammes, flèche du tutoriel figées), polices prêtes,
+// animations CSS désactivées. Les notifications sont masquées (bandeau « Partie de test » non fermable).
+// ------------------------------------------------------------------------------------------------
+
+/** Écran titre : orbite stabilisée puis figée. */
+async function captureTitle(page: Page, out: string): Promise<void> {
+  test.setTimeout(120_000);
+  const p = watch(page);
+  await seedPrefs(page);
+  await page.addInitScript(installPageClock);
+  await page.goto(`/?seed=${SEED}`);
+  await waitReady(page);
+  await waitTitle(page);
+  await waitFirst3DFrame(page);
+  await waitLoopTime(page, 1000, 5, 90_000);
+  expect((await render3dInfo(page)).presentation).toBe("title");
+  await expect(page.locator("#title h1")).toHaveText("Dernier Refuge");
+  await freezeClock(page);
+  await hideNotices(page);
+  await fontsReady(page);
+  await waitFrames(page, 3);
+  await page.screenshot({ path: out, ...SHOT });
+  expect(p.pageErrors).toEqual([]);
+  expect(p.consoleErrors).toEqual([]);
+}
+
+/**
+ * Jeu de jour à `?seed=7`, caméra stabilisée, horloge gelée. `tutorial` : préférences vierges (carte
+ * et flèche du tutoriel visibles) ; sinon tutoriel terminé.
+ */
+async function openPlaying(page: Page, tutorial: boolean): Promise<void> {
+  if (!tutorial) await seedPrefs(page);
+  await page.addInitScript(installPageClock);
+  await page.goto(`/?seed=${SEED}`);
+  await waitReady(page);
+  await enterGame(page, "new");
+  await waitFirst3DFrame(page);
+  if (tutorial) {
+    await expect(page.locator("#tutorial")).toBeVisible();
+    await expect(page.locator("#tutorial .tutorial-card__count")).toHaveText("Objectif 1 sur 6");
+    await page.waitForFunction(() => (window as unknown as { __render3d?: { info(): { guide: boolean } } }).__render3d?.info().guide === true, undefined, {
+      timeout: 30_000,
+      polling: 50,
+    });
+  } else {
+    await expect(page.locator("#tutorial")).toBeHidden();
+  }
+  const s = await waitLoopTime(page, SETTLE_MS, SETTLE_FRAMES, 90_000);
+  console.log(`[capture] stabilisé : ${s.frames} images, ${s.loopMs.toFixed(0)} ms de boucle`);
+  await freezeClock(page);
+  await hideNotices(page);
+  await fontsReady(page);
+  await waitFrames(page, 3);
+}
+
+async function captureHud(page: Page, testInfo: TestInfo, key: DayNightKey, out: string): Promise<void> {
+  test.setTimeout(120_000);
+  const c = buildDayNightScenarios()[key];
+  const p = watch(page);
+  await openWithState(page, testInfo, "/", c);
+  await expectHud(page, c.expect, key);
+  await hideNotices(page);
+  await fontsReady(page);
+  await waitFrames(page, 2);
+  await page.screenshot({ path: out, ...SHOT });
+  expect(p.pageErrors).toEqual([]);
+  expect(p.consoleErrors).toEqual([]);
+}
+
+async function captureTutorial(page: Page, out: string): Promise<void> {
+  test.setTimeout(120_000);
+  const p = watch(page);
+  await openPlaying(page, true);
+  await page.screenshot({ path: out, ...SHOT });
+  expect(p.pageErrors).toEqual([]);
+  expect(p.consoleErrors).toEqual([]);
+}
+
+// ------------------------------------------------------------------------------------------------
+
+/** Camp au cadrage par défaut (`?seed=`), tutoriel terminé, entrée en jeu par « Nouvelle partie ». */
+async function captureCamp(page: Page, mode: "2d" | "3d", out: string): Promise<void> {
+  test.setTimeout(120_000);
+  const p = watch(page);
+  await seedPrefs(page);
+  await page.goto(mode === "2d" ? `/?render=2d&seed=${SEED}` : `/?seed=${SEED}`);
+  await waitReady(page);
+  await enterGame(page, "new");
+  await settle(page, mode);
+  await hideNotices(page);
+  await waitFrames(page, 3);
+  await page.screenshot({ path: out });
+  expect(p.pageErrors).toEqual([]);
+}
 
 test.describe("desktop 1280×720", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
   test("camp-3d-desktop.png", async ({ page }) => {
-    test.setTimeout(120_000);
-    const p = watch(page);
-    await page.goto(`/?seed=${SEED}`);
-    await settle(page, "3d");
-    await hideNotices(page);
-    await waitFrames(page, 3);
-    await page.screenshot({ path: "captures/camp-3d-desktop.png" });
-    expect(p.pageErrors).toEqual([]);
+    await captureCamp(page, "3d", "captures/camp-3d-desktop.png");
   });
 
   test("camp-2d-desktop.png (comparaison, ?render=2d)", async ({ page }) => {
+    await captureCamp(page, "2d", "captures/camp-2d-desktop.png");
+  });
+
+  test("ui-title-desktop.png", async ({ page }) => {
+    await captureTitle(page, "captures/ui-title-desktop.png");
+  });
+
+  test("ui-hud-day-desktop.png", async ({ page }, testInfo) => {
+    await captureHud(page, testInfo, "day", "captures/ui-hud-day-desktop.png");
+  });
+
+  test("ui-hud-night-desktop.png", async ({ page }, testInfo) => {
+    await captureHud(page, testInfo, "nightLit", "captures/ui-hud-night-desktop.png");
+  });
+
+  test("ui-tutorial-arrow-desktop.png", async ({ page }) => {
+    await captureTutorial(page, "captures/ui-tutorial-arrow-desktop.png");
+  });
+
+  test("ui-pause-desktop.png puis ui-settings-desktop.png", async ({ page }) => {
     test.setTimeout(120_000);
     const p = watch(page);
-    await page.goto(`/?render=2d&seed=${SEED}`);
-    await settle(page, "2d");
-    await hideNotices(page);
-    await waitFrames(page, 3);
-    await page.screenshot({ path: "captures/camp-2d-desktop.png" });
+    await openPlaying(page, false);
+    await openPause(page);
+    await waitFrames(page, 2);
+    await page.screenshot({ path: "captures/ui-pause-desktop.png", ...SHOT });
+    await page.locator('#dialogs [data-dialog="pause"] [data-action="settings"]').click();
+    await expectPanel(page, "settings");
+    await waitFrames(page, 2);
+    await page.screenshot({ path: "captures/ui-settings-desktop.png", ...SHOT });
     expect(p.pageErrors).toEqual([]);
+    expect(p.consoleErrors).toEqual([]);
   });
 
   test("camp-3d-midgame-desktop.png (partie en cours, butin en vol)", async ({ page }, testInfo) => {
@@ -299,16 +435,8 @@ test.describe("mobile 390×844 portrait, tactile", () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
 
   test("camp-3d-mobile.png", async ({ page }) => {
-    test.setTimeout(120_000);
-    const p = watch(page);
-    await page.goto(`/?seed=${SEED}`);
-    await waitReady(page);
+    await captureCamp(page, "3d", "captures/camp-3d-mobile.png");
     expect(await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches)).toBe(true);
-    await settle(page, "3d");
-    await hideNotices(page);
-    await waitFrames(page, 3);
-    await page.screenshot({ path: "captures/camp-3d-mobile.png" });
-    expect(p.pageErrors).toEqual([]);
   });
 
   test("camp-3d-midgame-mobile.png (partie en cours, butin en vol)", async ({ page }, testInfo) => {
@@ -320,4 +448,38 @@ test.describe("mobile 390×844 portrait, tactile", () => {
       await captureDayNight(page, testInfo, key, `captures/${name}-mobile.png`);
     });
   }
+
+  test("ui-title-mobile.png", async ({ page }) => {
+    await captureTitle(page, "captures/ui-title-mobile.png");
+  });
+
+  test("ui-tutorial-arrow-mobile.png", async ({ page }) => {
+    await captureTutorial(page, "captures/ui-tutorial-arrow-mobile.png");
+  });
+
+  test("ui-mobile-portrait.png (jeu de jour + tutoriel ; HUD ≤ 12 % de la hauteur)", async ({ page }) => {
+    test.setTimeout(120_000);
+    const p = watch(page);
+    await openPlaying(page, true);
+    const box = await page.locator("#hud").boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.height ?? Infinity).toBeLessThanOrEqual(0.12 * 844);
+    await page.screenshot({ path: "captures/ui-mobile-portrait.png", ...SHOT });
+    expect(p.pageErrors).toEqual([]);
+  });
+});
+
+test.describe("mobile 360×640 portrait, tactile", () => {
+  test.use({ viewport: { width: 360, height: 640 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+
+  test("ui-mobile-360.png (jeu + tutoriel, plus petit écran visé)", async ({ page }) => {
+    test.setTimeout(120_000);
+    const p = watch(page);
+    await openPlaying(page, true);
+    const box = await page.locator("#hud").boundingBox();
+    expect(box?.height ?? Infinity).toBeLessThanOrEqual(0.12 * 640);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await page.screenshot({ path: "captures/ui-mobile-360.png", ...SHOT });
+    expect(p.pageErrors).toEqual([]);
+  });
 });

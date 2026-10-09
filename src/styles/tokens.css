@@ -1,0 +1,172 @@
+/*
+ * Tokens de l'interface (docs/design/ui-style.md §1 à §3, §6, §8). Ce fichier ne contient QUE des
+ * variables : aucune couleur, taille, durée ou ombre en dur ailleurs dans les composants.
+ */
+:root {
+  /* --- Couleurs (§1) ------------------------------------------------------------------------ */
+  /* Nuit (fonds) */
+  --c-night-900: #0e1626;
+  --c-night-800: #16223a;
+  --c-night-700: #22324f;
+  --c-night-600: #2f4368;
+  --c-hud-bg: rgba(14, 22, 38, 0.82);
+  --c-scrim: rgba(8, 12, 22, 0.62);
+  /* Feu (action, accent) */
+  --c-ember-300: #ffc27a;
+  --c-ember-400: #ffa552;
+  --c-ember-500: #ff8a2a;
+  --c-ember-600: #e06a12;
+  --c-ember-700: #a84a00;
+  /* Bois (cadres, décor) */
+  --c-wood-700: #4a2f1c;
+  --c-wood-500: #8b5a34;
+  --c-wood-300: #c99a6b;
+  /* Parchemin */
+  --c-parchment-100: #f6ebd3;
+  --c-parchment-200: #eadbb8;
+  --c-ink-900: #2b1d12;
+  --c-ink-600: #5c4532;
+  /* Texte sur fond nuit */
+  --c-text-100: #f7f1e6;
+  --c-text-300: #bfc8da;
+  /* Sémantique (toujours doublée d'une icône ou d'un mot) */
+  --c-success-400: #6fcf7a;
+  --c-success-700: #256b30;
+  --c-warn-400: #ffc83d;
+  --c-danger-400: #ff6b5a;
+  --c-danger-600: #b3261e;
+  --c-frost-300: #9cc9ff;
+  --c-spend: #ff9c8a;
+  --c-focus: #ffd84a;
+  /* Dérivés (même teinte que night-800, opacité du guide §5 « Toast ») */
+  --c-toast-bg: rgba(22, 34, 58, 0.96);
+
+  /* --- Typographie (§2) --------------------------------------------------------------------- */
+  --font-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --font-text: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 24px;
+  --fs-2xl: 32px;
+  --fs-title: clamp(44px, 12vw, 96px);
+  --lh-tight: 1.15;
+  --lh-text: 1.4;
+  --fw-regular: 400;
+  --fw-bold: 800;
+  --fw-display: 600;
+  --ls-caps: 0.04em;
+
+  /* --- Espacements, rayons, ombres, couches (§3) -------------------------------------------- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+  --shadow-press: 0 3px 0 var(--c-wood-700);
+  --shadow-press-down: 0 1px 0 var(--c-wood-700);
+  --shadow-1: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 8px 20px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --glow-ember: 0 0 24px rgba(255, 138, 42, 0.55);
+  --z-hud: 10;
+  --z-tutorial: 12;
+  --z-controls: 20;
+  --z-notices: 25;
+  --z-title: 30;
+  --z-dialog: 50;
+  --z-loading: 60;
+
+  /* --- Tailles de composants (§4, §5, §8) --------------------------------------------------- */
+  --tap: 44px; /* cible tactile minimale */
+  --icon-xs: 16px;
+  --icon-sm: 18px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-xl: 32px;
+  --hud-row-h: 36px;
+  --gauge-h: 8px;
+  --gauge-w: 56px;
+  --switch-w: 52px;
+  --switch-h: 32px;
+  --thumb: 24px;
+  --border-1: 2px;
+  --border-2: 3px;
+  --band: 4px; /* bande de couleur des toasts */
+  --tab-underline: 3px;
+  --panel-w: 400px;
+  --card-w: 360px;
+  --toast-w: 480px;
+  --title-w: 420px;
+
+  /* --- Animations (§6) ---------------------------------------------------------------------- */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 350ms;
+  --dur-4: 700ms;
+  --dur-exit: 150ms;
+  --dur-screen: 300ms;
+  --dur-pulse: 1.2s;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Amplitudes de mouvement (mises à 0 en « réduire les animations ») */
+  --move-enter-scale: 0.96;
+  --move-toast-y: 12px;
+  --move-title-y: 12px;
+  --move-badge-y: -16px;
+  --move-press-y: 2px;
+}
+
+/* --- Réduire les animations (§6) : l'app pose <html data-motion="reduce"> -------------------- */
+:root[data-motion="reduce"] {
+  --dur-2: var(--dur-1);
+  --dur-3: 0ms;
+  --dur-4: var(--dur-1);
+  --dur-exit: var(--dur-1);
+  --dur-screen: 0ms;
+  --move-enter-scale: 1;
+  --move-toast-y: 0px;
+  --move-title-y: 0px;
+  --move-badge-y: 0px;
+  --move-press-y: 0px;
+}
+
+/* Secours avant le démarrage du JS (attribut pas encore posé). */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion]) {
+    --dur-2: var(--dur-1);
+    --dur-3: 0ms;
+    --dur-4: var(--dur-1);
+    --dur-exit: var(--dur-1);
+    --dur-screen: 0ms;
+    --move-enter-scale: 1;
+    --move-toast-y: 0px;
+    --move-title-y: 0px;
+    --move-badge-y: 0px;
+    --move-press-y: 0px;
+  }
+}
+
+/* --- HUD ≤ 12 % de la hauteur (§8) ------------------------------------------------------------ */
+@media (max-width: 559.98px) {
+  :root {
+    --hud-row-h: 32px;
+    --gauge-w: 40px;
+  }
+}
+
+@media (max-width: 559.98px) and (max-height: 619.98px) {
+  :root {
+    --hud-row-h: 28px;
+    --gauge-w: 32px;
+  }
+}

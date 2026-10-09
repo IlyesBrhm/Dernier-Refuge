@@ -21,8 +21,17 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}/`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    // WebGL logiciel (SwiftShader) : fonctionne en headless et en CI sans GPU.
-    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] },
+    // WebGL logiciel (SwiftShader) : fonctionne en headless et en CI sans GPU. Sous forte charge, le chien de garde
+    // tue le processus GPU puis Chromium bloque WebGL pour l'origine : les deux dernières options l'empêchent.
+    launchOptions: {
+      args: [
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+        "--ignore-gpu-blocklist",
+        "--disable-gpu-watchdog",
+        "--disable-domain-blocking-for-3d-apis",
+      ],
+    },
   },
   projects: [
     {

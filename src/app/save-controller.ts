@@ -8,7 +8,7 @@
 // exécutés dans onFrame, chaque gestionnaire lit un état ENTRE DEUX TICKS. `busy` ne sert qu'à ignorer un
 // double-clic sur import / nouvelle partie : il n'empêche pas l'autosave.
 
-import type { GameState } from "../core/index";
+import { clockInfo, type GameState } from "../core/index";
 import {
   APP_MESSAGES,
   bootUsesStorage,
@@ -52,16 +52,29 @@ import {
   type WriteResult,
 } from "../save/index";
 import { downloadText } from "../ui/download";
-import type { Notices } from "../ui/notices";
+import type { Notices } from "../ui/notify";
 import type { Game } from "./game";
 import { randomSeed, readSeedParam } from "./seed";
 
+/** Origine d'un remplacement d'état fait par la sauvegarde (hors démarrage). */
+export type ReplaceOrigin = "import" | "newGame" | "ownerResume";
+
 export interface SaveControllerUi {
   game: Game;
-  /** Confirmation affichée par le menu (src/ui). */
+  /** Confirmation affichée par l'interface (src/ui/dialog). */
   confirm(message: string, confirmLabel: string): Promise<boolean>;
   /** La possibilité de remplacer la partie (import / nouvelle partie) a pu changer : relire `replaceBlockedReason`. */
   onPersistenceChange(): void;
+  /** L'état de la partie vient d'être remplacé (import, nouvelle partie, reprise du verrou). */
+  onReplaced?(origin: ReplaceOrigin): void;
+}
+
+/** « Continuer » de l'écran titre (ui-polish.md §1.3). */
+export interface ContinueInfo {
+  day: number;
+  night: boolean;
+  /** Onglet non propriétaire de la sauvegarde : la partie ne sera pas sauvegardée. */
+  readOnly: boolean;
 }
 
 export interface SaveController {
@@ -70,12 +83,21 @@ export interface SaveController {
   /** Branche la partie démarrée : autosave, événements de page, reprise du verrou. */
   attach(ui: SaveControllerUi): void;
   exportCurrent(): void;
-  importFile(file: File): Promise<void>;
-  newGame(): Promise<void>;
+  /** true ⇔ partie remplacée. */
+  importFile(file: File): Promise<boolean>;
+  /** true ⇔ partie remplacée (confirmation acceptée et écriture réussie, ou partie temporaire). */
+  newGame(): Promise<boolean>;
   exportDamaged(): void;
   hasDamaged(): boolean;
   /** Raison pour laquelle import / nouvelle partie sont désactivés (null = autorisés), cf. src/save/boot.ts. */
   replaceBlockedReason(): string | null;
+  /** Autosave immédiate (retour à l'écran titre). Sautée si l'état n'a pas changé ou si non propriétaire. */
+  flush(): void;
+  /** La partie a été jouée dans cette session (premier `play`) : « Continuer » devient possible. */
+  markPlayed(): void;
+  /** null ⇔ pas de « Continuer » (partie jamais jouée : sauvegarde au tick 0, absente, abîmée, temporaire). */
+  continueInfo(): ContinueInfo | null;
+  bootKind(): "load" | "new" | "temporary";
 }
 
 // --- Verrou multi-onglets ------------------------------------------------------------------------
@@ -140,6 +162,10 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
   let lockGen = 0;
   let booted = false;
   let ui: SaveControllerUi | null = null;
+  /** La partie a été lancée au moins une fois (bouton Continuer / Nouvelle partie) dans cette session. */
+  let played = false;
+  /** L'état courant vient d'une sauvegarde lue (démarrage ou reprise du verrou). */
+  let loadedFromSave = false;
 
   const isOwner = (): boolean => tabLock?.lock.isOwner() ?? false;
   const now = (): number => Math.max(0, Math.floor(Date.now()));
@@ -229,8 +255,12 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
     });
     session = plan.session;
     apply(plan.effects);
-    if (plan.kind === "resume") ui.game.replaceState(plan.state);
+    if (plan.kind === "resume") {
+      ui.game.replaceState(plan.state);
+      loadedFromSave = true;
+    }
     if ((plan.kind === "resume" || plan.kind === "commit_current") && plan.storage) runSteps(plan.storage);
+    if (plan.kind === "resume") ui.onReplaced?.("ownerResume");
   }
 
   // --- Écriture ---
@@ -248,23 +278,26 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
   }
 
   /** Remplace la partie (import / nouvelle partie confirmés) ; hors `?seed=`, seulement après écriture réussie. */
-  function replaceGame(kind: ReplaceKind, state: GameState, newSeed: number): void {
-    if (!ui) return;
+  function replaceGame(kind: ReplaceKind, state: GameState, newSeed: number): boolean {
+    if (!ui) return false;
     let out = planReplaceResult(session, isOwner(), kind, state, newSeed, null);
     if (out.kind === "commit_then_replace") {
       out = planReplaceResult(session, isOwner(), kind, state, newSeed, writeBoth(state, newSeed));
     }
     session = out.session;
     if (out.kind === "write_failed") warnWrite(out.warn);
-    if (out.kind === "replaced" || out.kind === "replace_without_write") ui.game.replaceState(state);
+    const replaced = out.kind === "replaced" || out.kind === "replace_without_write";
+    if (replaced) ui.game.replaceState(state);
     apply(out.effects);
+    if (replaced) ui.onReplaced?.(kind);
+    return replaced;
   }
 
   /** Vérifications communes avant import / nouvelle partie. false ⇒ ne rien faire. */
   function canStartReplace(): boolean {
     if (!ui || busy) return false;
     const blocked = blockedReason(session, isOwner());
-    if (blocked !== null) notices.toast(blocked);
+    if (blocked !== null) notices.toast(blocked, { kind: "warning", key: "blocked" });
     return blocked === null;
   }
 
@@ -282,6 +315,7 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
   if (import.meta.env.DEV && plan.devWarning !== null) console.warn(`[save] ${plan.devWarning}`);
   apply(plan.effects);
   if (plan.storage) runSteps(plan.storage);
+  loadedFromSave = plan.game.kind === "load";
   booted = true;
 
   return {
@@ -314,18 +348,18 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
       const r = exportSave(state, { seed: session.seed, savedAt: now() });
       if (!r.ok) {
         if (import.meta.env.DEV) console.warn(`[save] export refusé : ${r.error}`, r.details);
-        notices.toast(APP_MESSAGES.exportFailed);
+        notices.toast(APP_MESSAGES.exportFailed, { kind: "warning", key: "export" });
         return;
       }
-      if (!downloadText(exportFileName(state), r.text)) notices.toast(APP_MESSAGES.exportFailed);
+      if (!downloadText(exportFileName(state), r.text)) notices.toast(APP_MESSAGES.exportFailed, { kind: "warning", key: "export" });
     },
 
-    async importFile(file): Promise<void> {
-      if (!canStartReplace() || !ui) return;
+    async importFile(file): Promise<boolean> {
+      if (!canStartReplace() || !ui) return false;
       // Taille vérifiée AVANT toute lecture du fichier.
       if (file.size > SAVE_CONFIG.maxImportBytes) {
-        notices.toast(SAVE_MESSAGES.importTooLarge);
-        return;
+        notices.toast(SAVE_MESSAGES.importTooLarge, { kind: "warning", key: "import" });
+        return false;
       }
       busy = true;
       try {
@@ -333,33 +367,50 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
         try {
           text = await file.text();
         } catch {
-          notices.toast(SAVE_MESSAGES.importUnreadable);
-          return;
+          notices.toast(SAVE_MESSAGES.importUnreadable, { kind: "warning", key: "import" });
+          return false;
         }
         const res = importSave(text);
         if (!res.ok) {
           if (import.meta.env.DEV) console.warn(`[save] import refusé : ${res.error}`, res.details);
-          notices.toast(importErrorMessage(res.error));
-          return;
+          notices.toast(importErrorMessage(res.error), { kind: "warning", key: "import" });
+          return false;
         }
-        if (!(await ui.confirm(SAVE_MESSAGES.confirmImport, APP_MESSAGES.importConfirmLabel))) return;
-        replaceGame("import", res.state, res.seed);
+        if (!(await ui.confirm(SAVE_MESSAGES.confirmImport, APP_MESSAGES.importConfirmLabel))) return false;
+        return replaceGame("import", res.state, res.seed);
       } finally {
         busy = false;
       }
     },
 
-    async newGame(): Promise<void> {
-      if (!canStartReplace() || !ui) return;
+    async newGame(): Promise<boolean> {
+      if (!canStartReplace() || !ui) return false;
       busy = true;
       try {
-        if (!(await ui.confirm(SAVE_MESSAGES.confirmNewGame, APP_MESSAGES.newGameConfirmLabel))) return;
+        if (!(await ui.confirm(SAVE_MESSAGES.confirmNewGame, APP_MESSAGES.newGameConfirmLabel))) return false;
         const s = randomSeed();
-        replaceGame("newGame", createNewGame(s).state, s);
+        return replaceGame("newGame", createNewGame(s).state, s);
       } finally {
         busy = false;
       }
     },
+
+    flush(): void {
+      autosave();
+    },
+
+    markPlayed(): void {
+      played = true;
+    },
+
+    continueInfo(): ContinueInfo | null {
+      const state = ui?.game.state ?? plan.game.state;
+      if (!(played || (loadedFromSave && state.tick > 0))) return null;
+      const c = clockInfo(state);
+      return { day: c.day, night: c.phase === "night", readOnly: isPersistent(session) && !isOwner() };
+    },
+
+    bootKind: () => plan.game.kind,
 
     exportDamaged(): void {
       if (session.pendingDamaged.length > 0) {
@@ -367,7 +418,7 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
           quarantinedAt: null,
           reports: session.pendingDamaged.map((r) => ({ slot: r.slot, error: r.error, raw: r.raw })),
         });
-        if (!downloadText(damagedExportFileName(), text)) notices.toast(APP_MESSAGES.exportFailed);
+        if (!downloadText(damagedExportFileName(), text)) notices.toast(APP_MESSAGES.exportFailed, { kind: "warning", key: "export" });
         return;
       }
       const latest = session.storageOk ? listQuarantine(storage)[0] : undefined;
@@ -376,7 +427,7 @@ export async function bootSave(win: Window, notices: Notices): Promise<SaveContr
         return;
       }
       if (!downloadText(damagedExportFileName(latest.quarantinedAt), latest.text)) {
-        notices.toast(APP_MESSAGES.exportFailed);
+        notices.toast(APP_MESSAGES.exportFailed, { kind: "warning", key: "export" });
       }
     },
 

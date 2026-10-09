@@ -5,9 +5,10 @@ on:
   pull_request:
 
 jobs:
+  # Vérifications légères (les mêmes qu'en local).
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,14 +26,44 @@ jobs:
       # Les modèles 3D livrés (public/assets/) ne doivent pas dépasser 4 Mo.
       - run: npm run assets:size
       - run: npm run build
-      # Tests de bout en bout (3D par défaut, 2D via ?render=2d, replis 2D, jour/nuit, budget de draw calls).
+
+  # Tests de bout en bout et captures : UNIQUEMENT ici (jamais en local, cf. CLAUDE.md).
+  e2e:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
-      - uses: actions/upload-artifact@v4
-        if: failure()
+      # 3D par défaut, 2D via ?render=2d, replis 2D, jour/nuit, interface (titre, pause, paramètres, tutoriel),
+      # budget de draw calls.
+      - name: Tests e2e
+        id: e2e
+        run: npm run e2e
+      # Captures choisies (captures/), régénérées même si des tests e2e ont échoué.
+      - name: Captures
+        if: always()
+        run: npm run captures
+      - name: Artefact — captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-captures
+          path: captures/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Artefact — rapports e2e (traces, captures d'échec)
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: |
             playwright-report/
             test-results/
-          retention-days: 7
+          if-no-files-found: ignore
+          retention-days: 14

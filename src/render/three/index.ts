@@ -8,19 +8,34 @@
 import * as THREE from "three";
 import { referenceMap, type GameState, type MapState } from "../../core";
 import { createAssetLibrary, type AssetLibrary } from "../assets/asset-loader";
+import { lightingAt } from "../daylight";
 import { createFxLayer, type FxSample } from "../fx";
-import type { Renderer, ScreenInsets } from "../renderer";
+import type { GuideTarget, Presentation, Quality, Renderer, ScreenInsets } from "../renderer";
 import { createCharacterKit, type CharacterKit } from "./characters";
-import { ANIM, CHARACTER_MODELS, LOADING, MODEL_IDS, QUALITY, RENDER3D_ASSET_IDS, TILE_METERS, U } from "./config";
+import {
+  ANIM,
+  CHARACTER_MODELS,
+  GUIDE,
+  LOADING,
+  MODEL_IDS,
+  QUALITY,
+  QUALITY_LEVELS,
+  RENDER3D_ASSET_IDS,
+  TILE_METERS,
+  TITLE,
+  U,
+  toMeters,
+} from "./config";
 import { Render3DError } from "./errors";
 import { createLootFx, type LootFx } from "./loot-fx";
 import { createOverlay, type Overlay } from "./overlay";
 import { createProcedural, DECAL_Y, type Procedural } from "./procedural";
 import { createReconciler, type Reconciler } from "./reconcile";
-import { buildScene, buildStaticLayout, type SceneFrame } from "./scene-model";
+import { buildScene, buildStaticLayout, type FireItem, type SceneFrame } from "./scene-model";
 import { createStage, type Stage } from "./stage";
 import { createStaticLayer, type StaticLayer } from "./static-layer";
 import { FireView } from "./views/fire-view";
+import { GuideView } from "./views/guide-view";
 import { createBerryLayer, createViewKit, setMaterials, type BerryLayer, type FrameContext, type ViewKit } from "./views/kit";
 import { createMessyTent } from "./views/tent-view";
 import { detectWebGL } from "./webgl-support";
@@ -35,6 +50,13 @@ export interface Render3DOptions {
   onProgress?: (ratio: number) => void;
   /** Contexte WebGL perdu et non restauré après LOADING.contextRestoreMs : l'app doit basculer en 2D. */
   onContextLost?: () => void;
+  /**
+   * Qualité choisie par le joueur (préférences), appliquée AVANT le warm-up : les programmes sont
+   * compilés une seule fois dans la bonne configuration d'ombres (sinon, en Bas, tout est compilé avec
+   * ombres puis recompilé sans à la première image : double compilation, très lente en WebGL logiciel).
+   * Absente = défaut de l'appareil + dégradation adaptative.
+   */
+  quality?: Quality | null;
 }
 
 export interface Render3DInfo {
@@ -48,6 +70,14 @@ export interface Render3DInfo {
   shadow: ShadowOwner;
   /** Feu affiché allumé à la dernière image. */
   fireLit: boolean;
+  /** Présentation courante ("play" | "title"). */
+  presentation: Presentation;
+  /** Flèche du tutoriel affichée à la dernière image. */
+  guide: boolean;
+  /** Niveau de qualité appliqué (défaut de l'appareil tant que setQuality n'a pas été appelé). */
+  quality: Quality;
+  /** Nombre de programmes de shaders vivants (borné, cf. changements de qualité). */
+  programs: number;
 }
 
 /** Nombre max de buissons pris en charge par le calque de baies (6 baies chacun). */
@@ -140,6 +170,9 @@ async function assemble(
   checkpoint();
 
   const { renderer, scene, camera } = stage;
+  // Qualité choisie connue dès le démarrage : ombres / pixelRatio fixés avant toute compilation.
+  const initialQuality: Quality | null = opts.quality && opts.quality in QUALITY_LEVELS ? opts.quality : null;
+  if (initialQuality) stage.setQuality(initialQuality);
   const anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   const proc: Procedural = createProcedural(anisotropy);
   cleanups.push(() => proc.dispose());
@@ -177,6 +210,10 @@ async function assemble(
   const fireView = new FireView(kit);
   scene.add(fireView.object);
   cleanups.push(() => fireView.destroy());
+  // Flèche du tutoriel : vue unique (chevron + anneau), masquée hors tutoriel.
+  const guideView = new GuideView();
+  scene.add(guideView.object);
+  cleanups.push(() => guideView.dispose());
 
   let staticLayer: StaticLayer | null = null;
   /** Centre du tapis d'accueil (m), recalculé seulement quand la carte change. */
@@ -216,6 +253,7 @@ async function assemble(
   }
   // Feu : flammes, fumée et braises visibles pendant la compilation (points additifs / normaux).
   fireView.showAllForWarmup(center.x, center.z);
+  guideView.showForWarmup(center.x, center.z);
   for (const { geometry, material } of proc.all()) {
     const m = new THREE.Mesh(geometry, material);
     m.frustumCulled = false;
@@ -231,6 +269,7 @@ async function assemble(
   } finally {
     scene.remove(warm);
     for (const c of warmChars) c.destroy();
+    guideView.object.visible = false;
   }
   progress(1);
 
@@ -243,7 +282,11 @@ async function assemble(
   let lostTimer: number | null = null;
   const onLost = (e: Event): void => {
     e.preventDefault(); // autorise la restauration
+    // Journalisé (avertissement) : sans cela, une perte due au navigateur (processus GPU tué sous
+    // charge) est indiscernable d'un bug de rendu dans les traces e2e.
+    if (!contextLost) console.warn("[render] contexte WebGL perdu : attente de restauration");
     contextLost = true;
+    stage.canvas.dataset.contextLost = "1"; // masqué (main.css) : pas de canvas « cassé » à l'écran
     if (lostTimer !== null) window.clearTimeout(lostTimer);
     lostTimer = window.setTimeout(() => {
       lostTimer = null;
@@ -251,7 +294,11 @@ async function assemble(
     }, LOADING.contextRestoreMs);
   };
   const onRestored = (): void => {
+    if (contextLost) console.warn("[render] contexte WebGL restauré");
     contextLost = false;
+    delete stage.canvas.dataset.contextLost;
+    // Cartes d'ombre recréées vides par three : la carte active est redessinée à la prochaine image.
+    stage.refreshShadows();
     if (lostTimer !== null) window.clearTimeout(lostTimer);
     lostTimer = null;
   };
@@ -263,6 +310,17 @@ async function assemble(
     if (lostTimer !== null) window.clearTimeout(lostTimer);
   });
 
+  // --- Présentation (écran titre, flèche du tutoriel, qualité, mouvement réduit) : jamais l'état ---
+  let presentation: Presentation = "play";
+  let guide: GuideTarget | null = null;
+  let reducedMotion = false;
+  let quality: Quality = opts.coarsePointer ? "medium" : "high";
+  /** Début de l'orbite de l'écran titre (ms, horloge d'affichage). */
+  let titleStart = 0;
+  /** Éclairage forcé de l'écran titre (nuit bleutée), calculé une fois. */
+  const titleLighting = lightingAt(TITLE.lightTick);
+  let titleOverlayCleared = false;
+
   // --- Statistiques en lecture seule pour les e2e (aucun accès à l'état) ---
   let shownLight: LightPhase | null = null;
   const info = (): Render3DInfo => ({
@@ -273,6 +331,10 @@ async function assemble(
     light: shownLight,
     shadow: stage.shadowOwner(),
     fireLit: fireView.isLit(),
+    presentation,
+    guide: guideView.isShown(),
+    quality,
+    programs: renderer.info.programs?.length ?? 0,
   });
   const w = window as unknown as { __render3d?: { info(): Render3DInfo } };
   w.__render3d = Object.freeze({ info });
@@ -321,6 +383,48 @@ async function assemble(
     }
   }
 
+  /**
+   * Cible de la flèche en mètres + hauteur de la pointe : au-dessus des barres d'une tente ou d'un arbre
+   * prêt présents sur la tuile visée (lecture seule de l'état).
+   */
+  const guideAnchor = { x: 0, z: 0, height: 0 };
+  function guideAnchorOf(g: GuideTarget, curr: Readonly<GameState>): typeof guideAnchor {
+    const tx = Math.floor(g.x / U);
+    const ty = Math.floor(g.y / U);
+    let height: number = GUIDE.heightM;
+    for (const n of curr.nodes) {
+      if (n.kind === "tree" && n.status === "ready" && n.tile.tx === tx && n.tile.ty === ty) {
+        height = GUIDE.heightTreeM;
+        break;
+      }
+    }
+    if (height === GUIDE.heightM) {
+      for (const t of curr.tents) {
+        if (t.tile.tx === tx && t.tile.ty === ty) {
+          height = GUIDE.heightTentM;
+          break;
+        }
+      }
+    }
+    guideAnchor.x = toMeters(g.x);
+    guideAnchor.z = toMeters(g.y);
+    guideAnchor.height = height;
+    return guideAnchor;
+  }
+
+  /** Écran titre : feu forcé allumé À L'IMAGE (ratio ≥ TITLE.fireMinRatio) ; l'état n'est pas touché. */
+  function titleFire(it: FireItem): FireItem {
+    return { ...it, lit: true, low: false, feeding: false, ratio: Math.max(it.ratio, TITLE.fireMinRatio) };
+  }
+
+  function applyQuality(q: Quality): void {
+    quality = q;
+    stage.setQuality(q);
+    overlay.setQuality(q);
+    fireView.setFlameBudget(QUALITY_LEVELS[q].flames);
+    degraded = true; // plus de dégradation adaptative : le joueur a choisi
+  }
+
   function reset(): void {
     reconciler.clear();
     berries.dispose();
@@ -336,6 +440,10 @@ async function assemble(
     snapCamera = true;
     firstFrame = true;
   }
+
+  // Calque, flammes et état exposé alignés sur la qualité déjà appliquée à la scène (sans recompilation :
+  // shadowMap.enabled ne change plus).
+  if (initialQuality) applyQuality(initialQuality);
 
   return {
     onTick(prev: Readonly<GameState>, curr: Readonly<GameState>): void {
@@ -360,6 +468,9 @@ async function assemble(
 
       const layer = ensureStatic(curr.map);
       const frame = buildScene(prev, curr, alpha);
+      const title = presentation === "title";
+      // Écran titre : nuit bleutée forcée (présentation seulement, le tick n'est pas lu).
+      const lighting = title ? titleLighting : frame.lighting;
       ctx.dt = Math.min(dtMs / 1000, ANIM.maxDtS);
       ctx.now = now;
       ctx.playerAction = playerActionOf(frame);
@@ -367,43 +478,95 @@ async function assemble(
 
       // Feu (vue unique) puis éclairage : jour/nuit, lumières du feu et du joueur, bascule des ombres.
       let fireLight: ReturnType<FireView["update"]> | null = null;
+      let fireCenter: { x: number; z: number } | null = null;
       for (const it of frame.items) {
         if (it.type === "fire") {
-          fireLight = fireView.update(it, ctx);
+          fireLight = fireView.update(title ? titleFire(it) : it, ctx);
+          fireCenter = { x: it.x, z: it.z };
           break;
         }
       }
       fireView.object.visible = fireLight !== null;
-      stage.setLighting(frame.lighting, { fire: fireLight, player: frame.focus });
-      library.setDaylight(frame.lighting.daylight);
-      shownLight = frame.lighting.phase;
+      stage.setLighting(lighting, { fire: fireLight, player: frame.focus });
+      library.setDaylight(lighting.daylight);
+      shownLight = lighting.phase;
 
       berries.begin();
       reconciler.sync(frame, ctx);
       berries.end();
       layer.setWelcomeActive(frame.welcome.active);
-      layer.setNightWeight(1 - frame.lighting.sunWeight);
+      layer.setNightWeight(1 - lighting.sunWeight);
       const pulse = 0.55 + 0.4 * Math.sin((now / 1000) * ANIM.pulseHz * Math.PI * 2);
       proc.tentFrame.assigned.opacity = pulse;
 
       playerUnits.x = (frame.focus.x / TILE_METERS) * U;
       playerUnits.y = (frame.focus.z / TILE_METERS) * U;
       playerRing.position.set(frame.focus.x, PLAYER_RING_Y, frame.focus.z);
+      playerRing.visible = !title;
       fx.sample(now, playerUnits, samples);
       loot.update(samples, now);
 
-      stage.follow(frame.focus, ctx.dt, snapCamera, frame.framing);
-      snapCamera = false;
+      if (title) {
+        // Orbite lente autour du feu (angle fixe en mouvement réduit) ; retour au jeu : recalage net.
+        const t = (now - titleStart) / 1000;
+        const yaw = TITLE.orbitYaw0 + (reducedMotion ? 0 : (2 * Math.PI * t) / TITLE.orbitPeriodS);
+        stage.orbit(fireCenter ?? frame.focus, yaw);
+        snapCamera = true;
+      } else {
+        stage.follow(frame.focus, ctx.dt, snapCamera, frame.framing);
+        snapCamera = false;
+      }
       firstFrame = false;
+
+      const anchor = !title && guide ? guideAnchorOf(guide, curr) : null;
+      guideView.update(anchor, camera, now, reducedMotion);
+
+      stage.prepareRender();
       renderer.render(scene, camera);
 
+      if (title) {
+        // Ni barres, ni libellés, ni flèche sur le fond de l'écran titre.
+        if (!titleOverlayCleared) {
+          overlay.clear();
+          titleOverlayCleared = true;
+        }
+        return;
+      }
+      titleOverlayCleared = false;
       overlay.draw(frame, samples, camera, welcomeDecal, now);
+      if (anchor) overlay.drawGuideEdge(camera, anchor, now, reducedMotion);
     },
 
     reset,
 
     setScreenInsets(insets: ScreenInsets): void {
       overlay.setInsets(insets);
+    },
+
+    setPresentation(p: Presentation): void {
+      if (p === presentation) return;
+      presentation = p;
+      if (p === "title") titleStart = performance.now();
+      // Retour au jeu : caméra recalée sans lissage, vues conservées (pas de reset()).
+      snapCamera = true;
+    },
+
+    setGuide(g: GuideTarget | null): void {
+      if (g && Number.isFinite(g.x) && Number.isFinite(g.y)) {
+        if (guide) {
+          guide.x = g.x;
+          guide.y = g.y;
+        } else guide = { x: g.x, y: g.y };
+      } else guide = null;
+    },
+
+    setQuality(q: Quality): void {
+      if (!(q in QUALITY_LEVELS)) return;
+      applyQuality(q);
+    },
+
+    setReducedMotion(on: boolean): void {
+      reducedMotion = on;
     },
 
     dispose(): void {

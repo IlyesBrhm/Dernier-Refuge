@@ -16,7 +16,7 @@ src/core     LOGIQUE PURE : GameState, commandes, systèmes, sélecteurs, RNG
 src/data     constantes d'équilibrage typées (aucune logique)
 tests/       core/, save/ (Vitest)
 
- assets-src/  sources 3D brutes des 5 packs (CC0) — protégées
+ assets-src/  sources 3D brutes des 7 packs (CC0 ; dont kits modulaires Kenney castle + town) — protégées
  public/assets/ (modèles LIVRÉS, versionné, ≤ 4 Mo) + assets-all/ (conversion complète, local) + src/render/assets/asset-catalog.ts — GÉNÉRÉS par `npm run assets` (tools/build-assets.mjs)
 ```
 
@@ -42,8 +42,17 @@ Utiliser `/feature <description>` pour une fonctionnalité complète. Agents dis
 
 Barrière de tests (typecheck + tests) uniquement à la fin de la session principale ; le lint passe par `npm run check` et la revue.
 
+## Ressources de la machine locale (règle de l'utilisateur)
+- **Ne jamais lancer `npm run e2e`, `npm run captures` ni Playwright en local**, ni par un agent : la suite e2e et les
+  captures tournent **uniquement dans la CI GitHub** (artefacts `e2e-captures` et `playwright-report` à récupérer sur
+  le run). Pour diagnostiquer un échec e2e, lire les rapports existants (`test-results/`, artefacts CI) sans relancer.
+- En local, seulement les vérifications légères : `npm run typecheck`, `npm run lint`, `npm test` (Vitest est limité
+  à la moitié des cœurs : `maxWorkers: "50%"` dans `vite.config.ts`).
+- Pas d'agents en parallèle sans nécessité : un agent à la fois sauf gain réel et tâches légères.
+- Ne pas laisser tourner `npm run dev` : l'arrêter dès qu'il n'est plus utile (et en fin de session).
+
 ## Commandes
-`npm run dev` · `npm test` · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run coverage` · `npm run assets` (reconvertit les modèles 3D ; livrés = `tools/shipped-assets.json`) · `npm run assets:size` · `npm run e2e` (Playwright) · `npm run captures` (régénère `captures/`)
+`npm run dev` · `npm test` · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run coverage` · `npm run assets` (reconvertit les modèles 3D ; livrés = `tools/shipped-assets.json`) · `npm run assets:size` · `npm run e2e` (Playwright, **CI uniquement**) · `npm run captures` (régénère `captures/`, **CI uniquement**)
 
 Aperçu de tous les modèles 3D (`assets-all/`, local) : `npm run dev` puis `/tools/asset-preview/`. Plans : `docs/design/render-3d.md` (rendu 3D), `docs/design/day-night.md` (jour/nuit, feu de camp).
 

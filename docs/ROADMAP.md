@@ -49,6 +49,7 @@
 ## Jalon 5 — Progression & polish
 - [ ] Objectifs, étoiles, nouvelles zones
 - [ ] Simulation headless `npm run sim` pour l'équilibrage
-- [ ] Sons, particules, tutoriel
+- [x] Sons, particules, tutoriel — interface complète (écran titre, HUD, pause, paramètres, notifications, tutoriel,
+  sons Web Audio) : `docs/design/ui-polish.md`, guide de style `docs/design/ui-style.md` (skill `ui-style`)
 - [ ] Progression hors-ligne plafonnée
   - Note : détection d'horloge trafiquée à faire avec le cycle jour/nuit.
